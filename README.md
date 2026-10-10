@@ -35,6 +35,29 @@ It streams a `tar.gz` from the remote host into the repo root as
 `minecraft-essentials-<date>.tar.gz`. Override with `REMOTE`, `REMOTE_DIR`,
 `OUT_DIR` or `STAMP` env vars, or pass the host/dir as arguments.
 
+## Alerts
+
+A systemd service on the server (`mc-alerts.service`) follows
+`logs/latest.log` and pushes an **ntfy** notification to your phone whenever a
+non-whitelisted player tries to join. Paper writes the trigger line:
+
+```
+[20:20:10] [Server thread/INFO]: Disconnecting Alex (/203.0.113.10:55658): You are not whitelisted on this server!
+```
+
+Scanners like `FishNet` disconnect during the handshake, before the whitelist
+check, so they never match and are ignored.
+
+**Subscribe on your phone:** install the *ntfy* app (iOS/Android) and add
+topic **`mc-familia-REDACTED`** (or open `https://ntfy.sh/mc-familia-REDACTED`
+in a browser). Anyone who knows a topic can read it, so keep it private.
+
+- Source: `scripts/alert-nonwhitelist.sh` (installed at `~/minecraft/scripts/`
+  on the server, unit at `/etc/systemd/system/mc-alerts.service`).
+- Same name within 300 s is coalesced into one alert.
+- Every blocked attempt is also appended to `~/minecraft/logs/blocked-joins.log`.
+- Manage it: `sudo systemctl status|stop|restart mc-alerts`.
+
 ## Version pin (important)
 
 AutoPlug updates the server jar automatically. The target version is set in
