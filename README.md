@@ -16,6 +16,13 @@ server is acessible without password with a key thru ssh.
 - Plugins: Geyser-Spigot (Bedrock), floodgate, ViaVersion.
 - World: `level-name=world` (default name). The world is at `~/minecraft/world`.
 
+## Local backup
+
+`minecraft-essentials-2026-10-10.tar.gz` (106 MB) — essentials of
+`~/minecraft`: configs, `world/`, `plugins/`, `logs/`, AutoPlug `.yml`.
+Excludes re-downloadable jars, `cache/`, `libraries/`, `versions/` and
+`autoplug/backups/`.
+
 ## Version pin (important)
 
 AutoPlug updates the server jar automatically. The target version is set in
