@@ -18,10 +18,12 @@ server is acessible without password with a key thru ssh.
 
 ## Local backup
 
-`minecraft-essentials-2026-10-10.tar.gz` (106 MB) — essentials of
-`~/minecraft`: configs, `world/`, `plugins/`, `logs/`, AutoPlug `.yml`.
-Excludes re-downloadable jars, `cache/`, `libraries/`, `versions/` and
-`autoplug/backups/`.
+`minecraft-essentials-2026-10-10.tar.gz` (209 MB) — a restartable snapshot of
+`~/minecraft`: `AutoPlug-Client.jar`, `paper.jar`, `start.sh`, the configs,
+`world/`, `plugins/`, `logs/` and AutoPlug `.yml`. Enough to bring the server
+up again: AutoPlug re-fetches Java and Paper re-fetches `libraries/`/`cache/`
+on first start. Excluded: `cache/`, `libraries/`, `versions/`,
+`autoplug/system/jre/`, `autoplug/backups/` and `plugins/.paper-remapped/`.
 
 Re-create it any time with one call:
 
