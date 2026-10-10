@@ -76,6 +76,18 @@ non-whitelisted player tries to join. Paper writes the trigger line:
 Scanners like `FishNet` disconnect during the handshake, before the whitelist
 check, so they never match and are ignored.
 
+**Bedrock (Geyser) players** log differently: the Java-side rejection has no
+username, only the IP, and the username appears on a Geyser line. Both are
+handled:
+
+```
+[Server thread/INFO]: Disconnecting /203.0.113.13:0: You are not whitelisted on this server!        # IP only
+[Geyser-Spigot] Kai has disconnected from the Java server because of §rYou are not whitelisted on this server!   # username
+```
+
+The script pairs them (IP from the Java line, name from the Geyser line) and
+reports it as e.g. `Blocked join: Kai` — `203.0.113.13 (bedrock)`.
+
 **Subscribe on your phone:** install the *ntfy* app (iOS/Android) and add
 topic **`mc-familia-REDACTED`** (or open `https://ntfy.sh/mc-familia-REDACTED`
 in a browser). Anyone who knows a topic can read it, so keep it private.
@@ -106,6 +118,14 @@ the newer version is confirmed.
 is empty, so it inherits `server-updater.version` (26.2).
 
 ## Changelog
+
+### 2026-10-10 - Alerts: handle Bedrock (Geyser) rejections
+
+- The non-whitelist alert now also matches Bedrock joins. The Java-side line
+  has no username (`Disconnecting /<ip>:0: ...`), so the script reads the name
+  from Geyser's line and the IP from the Java line. Previously it fired with a
+  garbage name (`/203.0.113.13:0: You are not whitelisted...`) or missed it.
+- Added a username sanity check so malformed lines cannot produce junk alerts.
 
 ### 2026-10-10 - Run AutoPlug under systemd (drop screen)
 

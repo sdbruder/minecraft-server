@@ -3,10 +3,16 @@
 # alert-nonwhitelist.sh - push an ntfy alert when a non-whitelisted player
 # tries to join the Minecraft server.
 #
-# It follows the server log and matches the whitelist rejection line that
-# Paper writes, which contains the name and IP, e.g.:
+# It follows the server log and matches the whitelist rejection lines Paper and
+# Geyser write. Java players get name + IP on one line:
 #
 #   [20:20:10] [Server thread/INFO]: Disconnecting Alex (/203.0.113.10:55658): You are not whitelisted on this server!
+#
+# Bedrock (Geyser) players split across two lines: the Java side has only the
+# IP, the username is on Geyser's line. The script pairs them.
+#
+#   [Server thread/INFO]: Disconnecting /203.0.113.13:0: You are not whitelisted on this server!
+#   [Geyser-Spigot] Kai has disconnected from the Java server because of §rYou are not whitelisted on this server!
 #
 # Note: scanners like FishNet never reach the whitelist check (they disconnect
 # during the handshake) so they do not produce that line and are ignored for
@@ -41,6 +47,10 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 fi
 
 declare -A last_seen=()
+last_bedrock_ip=""
+last_bedrock_ts=0
+
+valid_name() { [[ "$1" =~ ^[A-Za-z0-9_.]{1,16}$ ]]; }
 
 is_ignored() {
     local n="$1" x
@@ -70,18 +80,49 @@ send_alert() {
 }
 
 process_line() {
-    local line="$1" rest name ip ts
-    case "$line" in
-        *"Disconnecting "*": You are not whitelisted on this server!"*) ;;
-        *) return 0 ;;
-    esac
-    rest="${line#*Disconnecting }"
-    name="${rest%% (/*}"
-    ip="${rest#*(/}"; ip="${ip%%:*}"
+    local line="$1" rest name ip ts now
     ts="${line#\[}"; ts="${ts%%\]*}"
-    [ -n "$name" ] || return 0
-    is_ignored "$name" && return 0
-    send_alert "$name" "$ip" "$ts"
+
+    # Any whitelist rejection line that starts with "Disconnecting ".
+    case "$line" in
+        *"Disconnecting "*"not whitelisted on this server!"*)
+            rest="${line#*Disconnecting }"
+            if [[ "$rest" == /* ]]; then
+                # Bedrock, Java-side line: no username, only the IP.
+                #   [Server thread/INFO]: Disconnecting /203.0.113.13:0: You are not whitelisted on this server!
+                ip="${rest#/}"; ip="${ip%%:*}"
+                last_bedrock_ip="$ip"; last_bedrock_ts="$(date +%s)"
+                return 0
+            fi
+            # Java player: name and IP on one line.
+            #   [Server thread/INFO]: Disconnecting Alex (/203.0.113.10:55658): You are not whitelisted on this server!
+            name="${rest%% (/*}"
+            valid_name "$name" || return 0
+            ip="${rest#*(/}"; ip="${ip%%:*}"
+            is_ignored "$name" && return 0
+            send_alert "$name" "$ip" "$ts"
+            return 0
+            ;;
+    esac
+
+    # Bedrock, Geyser-side line: has the real username + reason.
+    #   [Geyser-Spigot] Kai has disconnected from the Java server because of §rYou are not whitelisted on this server!
+    case "$line" in
+        *"[Geyser-Spigot] "*" has disconnected from the Java server because of "*"not whitelisted on this server!"*)
+            name="${line#*\[Geyser-Spigot\] }"; name="${name%% has disconnected*}"
+            valid_name "$name" || return 0
+            is_ignored "$name" && return 0
+            now="$(date +%s)"
+            if [ -n "$last_bedrock_ip" ] && [ "$((now - last_bedrock_ts))" -le 15 ]; then
+                ip="$last_bedrock_ip (bedrock)"
+            else
+                ip="unknown (bedrock)"
+            fi
+            send_alert "$name" "$ip" "$ts"
+            return 0
+            ;;
+    esac
+    return 0
 }
 
 if [ "${1:-}" = "--stdin" ]; then
