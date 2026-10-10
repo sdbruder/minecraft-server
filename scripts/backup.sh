@@ -5,7 +5,7 @@
 #
 # What it backs up:
 #   the AutoPlug wrapper (AutoPlug-Client.jar) + start.sh, the Paper server
-#   jar, root configs, config/, .paper/, world/, plugins/, logs/ and the
+#   jar, root configs, config/, .paper/, família/, plugins/, logs/ and the
 #   AutoPlug *.yml files.
 # This is enough to restart from scratch: AutoPlug re-fetches Java and Paper
 # re-fetches its libraries/cache on first start. To boot fully offline, also
@@ -59,7 +59,7 @@ INCLUDES=(
     usercache.json
     config
     .paper
-    world
+    família
     plugins
     logs
     autoplug/general.yml

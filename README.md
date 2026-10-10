@@ -14,13 +14,13 @@ server is acessible without password with a key thru ssh.
 - Software: Paper, managed by AutoPlug (screen session `AUTOPLUG`, start with `./start.sh`).
 - Minecraft version: **26.2** (pinned).
 - Plugins: Geyser-Spigot (Bedrock), floodgate, ViaVersion.
-- World: `level-name=world` (default name). The world is at `~/minecraft/world`.
+- World: `level-name=família`. The world is at `~/minecraft/família`.
 
 ## Local backup
 
-`minecraft-essentials-2026-10-10.tar.gz` (209 MB) — a restartable snapshot of
+`minecraft-essentials-2026-10-10.tar.gz` (208 MB) — a restartable snapshot of
 `~/minecraft`: `AutoPlug-Client.jar`, `paper.jar`, `start.sh`, the configs,
-`world/`, `plugins/`, `logs/` and AutoPlug `.yml`. Enough to bring the server
+`família/`, `plugins/`, `logs/` and AutoPlug `.yml`. Enough to bring the server
 up again: AutoPlug re-fetches Java and Paper re-fetches `libraries/`/`cache/`
 on first start. Excluded: `cache/`, `libraries/`, `versions/`,
 `autoplug/system/jre/`, `autoplug/backups/` and `plugins/.paper-remapped/`.
@@ -55,6 +55,12 @@ the newer version is confirmed.
 is empty, so it inherits `server-updater.version` (26.2).
 
 ## Changelog
+
+### 2026-10-10 - Rename world to família
+
+- Renamed the world folder `world` -> `família` and set
+  `server.properties` `level-name=família`.
+- Regenerated the local backup snapshot.
 
 ### 2026-10-10 - Downgrade to Minecraft 26.2
 
