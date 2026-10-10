@@ -1,0 +1,31 @@
+[Unit]
+Description=AutoPlug (Minecraft server wrapper)
+Documentation=https://autoplug.one
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=steve
+Group=steve
+WorkingDirectory=/home/steve/minecraft
+Environment=HOME=/home/steve
+Environment=USER=steve
+Environment=LANG=C.UTF-8
+ExecStart=/usr/bin/java -Dfile.encoding=UTF-8 -jar /home/steve/minecraft/AutoPlug-Client.jar
+# AutoPlug restarts itself on self-update by exiting; relaunch it. This is what
+# made the old `screen` wrapper necessary (see start.sh history).
+Restart=always
+RestartSec=10
+# Paper needs time to save worlds on shutdown.
+TimeoutStopSec=180
+# SIGTERM only to AutoPlug; it sends "stop" to the server child and waits for
+# it to finish saving. (control-group SIGTERM hits the child too, which makes
+# AutoPlug misread it as a crash.)
+KillMode=mixed
+# Safety net for any SIGTERM-initiated exit.
+SuccessExitStatus=143
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

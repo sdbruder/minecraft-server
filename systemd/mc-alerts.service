@@ -1,0 +1,15 @@
+[Unit]
+Description=Minecraft non-whitelist join alerts (ntfy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=steve
+Environment=HOME=/home/steve
+Environment=NTFY_TOPIC=mc-familia-REDACTED
+ExecStart=/home/steve/minecraft/scripts/alert-nonwhitelist.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

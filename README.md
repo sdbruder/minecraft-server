@@ -11,7 +11,7 @@ server is acessible without password with a key thru ssh.
 
 ## Server
 
-- Software: Paper, managed by AutoPlug (screen session `AUTOPLUG`, start with `./start.sh`).
+- Software: Paper, managed by AutoPlug under **systemd** (`autoplug.service`).
 - Minecraft version: **26.2** (pinned).
 - Plugins: Geyser-Spigot (Bedrock), floodgate, ViaVersion.
 - World: `level-name=família`. The world is at `~/minecraft/família`.
@@ -34,6 +34,34 @@ scripts/backup.sh
 It streams a `tar.gz` from the remote host into the repo root as
 `minecraft-essentials-<date>.tar.gz`. Override with `REMOTE`, `REMOTE_DIR`,
 `OUT_DIR` or `STAMP` env vars, or pass the host/dir as arguments.
+
+## Services (systemd)
+
+Both run as `steve`, start on boot, and are defined in `systemd/` in this repo
+(installed to `/etc/systemd/system/`).
+
+| unit | what |
+|---|---|
+| `autoplug.service` | Runs AutoPlug, the Minecraft server wrapper. Replaces the old `screen` wrapper. |
+| `mc-alerts.service` | The ntfy non-whitelist join alerts. |
+
+```sh
+sudo systemctl start|stop|restart autoplug
+systemctl status autoplug
+journalctl -u autoplug -f      # AutoPlug console + server output
+```
+
+Notes:
+- `sudo systemctl stop autoplug` stops Paper gracefully (worlds saved) before
+  AutoPlug exits.
+- `KillMode=mixed` so only AutoPlug gets SIGTERM and it stops the server itself;
+  `SuccessExitStatus=143` accepts AutoPlug's SIGTERM exit code.
+- AutoPlug's self-update restart is handled by `Restart=always` (that is why
+  `screen` was used before).
+- `/etc/systemd/system/minecraft.service` (a direct-Paper unit that would race
+  AutoPlug at boot) is **disabled**, as is the broken user unit
+  `~/.config/systemd/user/AutoPlug.service`.
+- Old screen launcher kept at `~/minecraft/start.sh.screen.bak`.
 
 ## Alerts
 
@@ -78,6 +106,17 @@ the newer version is confirmed.
 is empty, so it inherits `server-updater.version` (26.2).
 
 ## Changelog
+
+### 2026-10-10 - Run AutoPlug under systemd (drop screen)
+
+- Added `systemd/autoplug.service`; AutoPlug runs as a systemd service instead
+  of inside `screen`. Self-updater restarts are handled by `Restart=always`.
+- Disabled `/etc/systemd/system/minecraft.service` (direct-Paper unit that
+  would race AutoPlug at boot) and the broken user unit
+  `~/.config/systemd/user/AutoPlug.service`.
+- `autoplug/general.yml` `start-on-boot: false` (boot is owned by systemd).
+- Captured `systemd/mc-alerts.service` in the repo.
+- `~/minecraft/start.sh` now just calls `systemctl start autoplug`.
 
 ### 2026-10-10 - Rename world to família
 
