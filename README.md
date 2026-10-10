@@ -117,6 +117,11 @@ the newer version is confirmed.
 `autoplug/updater.yml` also drives the plugin checks: `plugins-updater.version`
 is empty, so it inherits `server-updater.version` (26.2).
 
+## Backlog
+
+See `TASKS.md`. Next up: a read-only web dashboard for server metrics
+(connected players, rejected joins, versions, plugins) on a non-80 port.
+
 ## Changelog
 
 ### 2026-10-10 - Alerts: handle Bedrock (Geyser) rejections
