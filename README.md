@@ -23,6 +23,16 @@ server is acessible without password with a key thru ssh.
 Excludes re-downloadable jars, `cache/`, `libraries/`, `versions/` and
 `autoplug/backups/`.
 
+Re-create it any time with one call:
+
+```sh
+scripts/backup.sh
+```
+
+It streams a `tar.gz` from the remote host into the repo root as
+`minecraft-essentials-<date>.tar.gz`. Override with `REMOTE`, `REMOTE_DIR`,
+`OUT_DIR` or `STAMP` env vars, or pass the host/dir as arguments.
+
 ## Version pin (important)
 
 AutoPlug updates the server jar automatically. The target version is set in
