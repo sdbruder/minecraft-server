@@ -42,11 +42,17 @@ is empty, so it inherits `server-updater.version` (26.2).
 Reason: Geyser-Spigot 2.11.3 does not work on Paper 26.3.
 
 - Removed the defined world: `level-name` changed from `Família` to `world`.
-  The old 26.3 world is kept at `~/minecraft/Família-26.3-old` (a 26.3 world
-  cannot be loaded by 26.2).
+  A 26.3 world cannot be loaded by 26.2. The old world was renamed to
+  `~/minecraft/Família-26.3-old` and later deleted.
 - Downgraded the server jar: `paper.jar` is now Paper 26.2 build 133
   (sha256 `bf1dcf62...c9ff1`). Also stored at `versions/26.2/paper-26.2.jar`.
 - Pinned AutoPlug: `autoplug/updater.yml` `server-updater.version: 26.2`
   (was `26.3`).
 - Backups of the old files: `server.properties.pre-26.2-downgrade.bak` and
   `autoplug/updater.yml.pre-26.2-downgrade.bak`.
+
+### 2026-10-10 - Geyser-Spigot update
+
+- Updated `plugins/Geyser-Spigot.jar` from build `1247` to build `1251`
+  (both version 2.11.3). Backup: `plugins/Geyser-Spigot.jar.pre-1251.bak`.
+- Deleted the old world `Família-26.3-old` (44 MB).
