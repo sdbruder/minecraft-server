@@ -43,7 +43,7 @@ Both run as `steve`, start on boot, and are defined in `systemd/` in this repo
 | unit | what |
 |---|---|
 | `autoplug.service` | Runs AutoPlug, the Minecraft server wrapper. Replaces the old `screen` wrapper. |
-| `mc-alerts.service` | The ntfy join alerts (successful and rejected). |
+| `mc-alerts.service` | The Pushover join alerts (successful and rejected). |
 
 ```sh
 sudo systemctl start|stop|restart autoplug
@@ -66,7 +66,7 @@ Notes:
 ## Alerts
 
 A systemd service on the server (`mc-alerts.service`) follows
-`logs/latest.log` and pushes **ntfy** notifications to your phone for every
+`logs/latest.log` and pushes **Pushover** notifications to your phone for every
 join: a successful one (`Joined: <name>`) and a rejected, non-whitelisted one
 (`Blocked join: <name>`).
 
@@ -106,12 +106,29 @@ handled:
 The script pairs them (IP from the Java line, name from the Geyser line) and
 reports it as e.g. `Blocked join: Kai` — `203.0.113.13 (bedrock)`.
 
-**Subscribe on your phone:** install the *ntfy* app (iOS/Android) and add
-topic **`mc-familia-REDACTED`** (or open `https://ntfy.sh/mc-familia-REDACTED`
-in a browser). Anyone who knows a topic can read it, so keep it private.
+**Pushover setup (one-time).** Pushover delivers instantly through Apple's APNs,
+so alerts arrive in real time on iOS (unlike ntfy, whose iOS app can only poll
+and is delayed).
+
+1. Install the *Pushover* app on the iPhone/iPad (one-time $4.99 per platform;
+   30-day free trial).
+2. Register an application at <https://pushover.net/apps/build> (name it e.g.
+   *Minecraft*); copy its **API Token**.
+3. Copy your **User Key** from the Pushover dashboard.
+4. Put both in `/etc/mc-alerts.env` on the server (root-owned, mode `600`):
+
+   ```
+   PUSHOVER_TOKEN=<app API token>
+   PUSHOVER_USER=<user key>
+   ```
+
+5. `sudo systemctl restart mc-alerts`.
 
 - Source: `scripts/alert-nonwhitelist.sh` (installed at `~/minecraft/scripts/`
   on the server, unit at `/etc/systemd/system/mc-alerts.service`).
+- Credentials live in `/etc/mc-alerts.env` (read by the unit via
+  `EnvironmentFile`), never in this repo.
+- Blocked joins send at priority *high* (1), joins at normal (0).
 - Same name within 300 s is coalesced into one alert.
 - Every blocked attempt is also appended to `~/minecraft/logs/blocked-joins.log`.
 - Manage it: `sudo systemctl status|stop|restart mc-alerts`.
@@ -141,6 +158,18 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 (connected players, rejected joins, versions, plugins) on a non-80 port.
 
 ## Changelog
+
+### 2026-10-11 - Alerts: switch from ntfy to Pushover
+
+- ntfy did not deliver in real time on iOS: the app cannot hold a socket and
+  only polls (documented delays up to ~20 min). The server was publishing fine
+  (HTTP 200), so the fix was the transport, not the script.
+- `scripts/alert-nonwhitelist.sh` now sends through the Pushover API
+  (`api.pushover.net/1/messages.json`), which pushes via APNs instantly.
+  Blocked joins use priority 1 (high), joins priority 0.
+- Credentials (`PUSHOVER_TOKEN`, `PUSHOVER_USER`) live in `/etc/mc-alerts.env`,
+  loaded by the unit via `EnvironmentFile`; `PUSHOVER_URL` is overridable for
+  tests.
 
 ### 2026-10-11 - Alerts: also notify on successful joins
 

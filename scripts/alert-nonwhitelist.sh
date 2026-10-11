@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# alert-nonwhitelist.sh - push an ntfy alert when a player joins the Minecraft
-# server, and when a non-whitelisted player tries to join.
+# alert-nonwhitelist.sh - push a Pushover alert when a player joins the
+# Minecraft server, and when a non-whitelisted player tries to join.
 #
 # It follows the server log. For a successful join it matches the entity line,
 # which carries name and IP for both Java and Bedrock players:
@@ -32,19 +32,21 @@
 #   scripts/alert-nonwhitelist.sh --stdin    # read lines from stdin (for tests)
 #
 # Environment:
-#   LOG        server log to follow   (default: ~/minecraft/logs/latest.log)
-#   NTFY_URL   ntfy base url          (default: https://ntfy.sh)
-#   NTFY_TOPIC ntfy topic for phone   (default: see below)
-#   COOLDOWN   per-name seconds       (default: 300)
-#   IGNORE     space-separated names  (default: FishNet)
-#   EVENTS     blocked-join log       (default: ~/minecraft/logs/blocked-joins.log)
-#   VERBOSE    1 to print ntfy reply  (default: 0)
+#   LOG            server log to follow   (default: ~/minecraft/logs/latest.log)
+#   PUSHOVER_TOKEN Pushover app API token (required; from pushover.net/apps)
+#   PUSHOVER_USER  Pushover user/group key (required)
+#   PUSHOVER_URL   Pushover API endpoint  (default: https://api.pushover.net/1/messages.json)
+#   COOLDOWN       per-name seconds       (default: 300)
+#   IGNORE         space-separated names  (default: FishNet)
+#   EVENTS         blocked-join log       (default: ~/minecraft/logs/blocked-joins.log)
+#   VERBOSE        1 to print API reply   (default: 0)
 #
 set -uo pipefail
 
 LOG="${LOG:-$HOME/minecraft/logs/latest.log}"
-NTFY_URL="${NTFY_URL:-https://ntfy.sh}"
-NTFY_TOPIC="${NTFY_TOPIC:-mc-familia-REDACTED}"
+PUSHOVER_TOKEN="${PUSHOVER_TOKEN:-}"
+PUSHOVER_USER="${PUSHOVER_USER:-}"
+PUSHOVER_URL="${PUSHOVER_URL:-https://api.pushover.net/1/messages.json}"
 COOLDOWN="${COOLDOWN:-300}"
 IGNORE="${IGNORE:-FishNet}"
 EVENTS="${EVENTS:-$HOME/minecraft/logs/blocked-joins.log}"
@@ -68,6 +70,22 @@ is_ignored() {
     return 1
 }
 
+pushover_send() {
+    # $1 title, $2 priority (-2..2), $3 message. Prints the HTTP status code.
+    local title="$1" priority="$2" msg="$3"
+    if [ -z "$PUSHOVER_TOKEN" ] || [ -z "$PUSHOVER_USER" ]; then
+        echo "pushover: PUSHOVER_TOKEN and PUSHOVER_USER must be set" >&2
+        return 1
+    fi
+    curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+        --form-string "token=$PUSHOVER_TOKEN" \
+        --form-string "user=$PUSHOVER_USER" \
+        --form-string "title=$title" \
+        --form-string "priority=$priority" \
+        --form-string "message=$msg" \
+        "$PUSHOVER_URL" 2>&1
+}
+
 send_alert() {
     local name="$1" ip="$2" ts="$3" now http
     now="$(date +%s)"
@@ -78,14 +96,9 @@ send_alert() {
 
     printf '%s\t%s\t%s\t%s\n' "$ts" "$name" "$ip" "$(date +%Y-%m-%dT%H:%M:%S%z)" >>"$EVENTS" 2>/dev/null
 
-    http="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
-        -H "Title: Blocked join: $name" \
-        -H "Priority: high" \
-        -H "Tags: no_entry" \
-        -d "$name tried to join from $ip at $ts UTC (not whitelisted)" \
-        "$NTFY_URL/$NTFY_TOPIC" 2>&1)"
+    http="$(pushover_send "Blocked join: $name" 1 "$name tried to join from $ip at $ts UTC (not whitelisted)")"
     if [ "$VERBOSE" = 1 ] || [ "$http" != 200 ]; then
-        echo "ntfy[$name] http=$http topic=$NTFY_TOPIC" >&2
+        echo "pushover[blocked:$name] http=$http" >&2
     fi
 }
 
@@ -97,13 +110,9 @@ send_join_alert() {
     fi
     last_join[$name]="$now"
 
-    http="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
-        -H "Title: Joined: $name" \
-        -H "Tags: white_check_mark" \
-        -d "$name joined from $ip at $ts UTC" \
-        "$NTFY_URL/$NTFY_TOPIC" 2>&1)"
+    http="$(pushover_send "Joined: $name" 0 "$name joined from $ip at $ts UTC")"
     if [ "$VERBOSE" = 1 ] || [ "$http" != 200 ]; then
-        echo "ntfy[join:$name] http=$http topic=$NTFY_TOPIC" >&2
+        echo "pushover[join:$name] http=$http" >&2
     fi
 }
 
@@ -181,6 +190,9 @@ process_line() {
 if [ "${1:-}" = "--stdin" ]; then
     while IFS= read -r line; do process_line "$line"; done
 else
-    echo "watching $LOG -> $NTFY_URL/$NTFY_TOPIC (ignoring: $IGNORE)" >&2
+    echo "watching $LOG -> pushover (ignoring: $IGNORE)" >&2
+    if [ -z "$PUSHOVER_TOKEN" ] || [ -z "$PUSHOVER_USER" ]; then
+        echo "warning: PUSHOVER_TOKEN/PUSHOVER_USER not set; alerts will not send" >&2
+    fi
     tail -n0 -F "$LOG" 2>/dev/null | while IFS= read -r line; do process_line "$line"; done
 fi

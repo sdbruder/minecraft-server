@@ -1,12 +1,14 @@
 [Unit]
-Description=Minecraft join alerts (ntfy)
+Description=Minecraft join alerts (Pushover)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=steve
 Environment=HOME=/home/steve
-Environment=NTFY_TOPIC=mc-familia-REDACTED
+# PUSHOVER_TOKEN / PUSHOVER_USER (root-owned, mode 600); optional so the
+# service still starts if the file is missing.
+EnvironmentFile=-/etc/mc-alerts.env
 ExecStart=/home/steve/minecraft/scripts/alert-nonwhitelist.sh
 Restart=always
 RestartSec=5
