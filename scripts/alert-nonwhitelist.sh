@@ -114,6 +114,11 @@ process_line() {
     # Successful join. The entity line has name and IP for Java and Bedrock:
     #   [Server thread/INFO]: Steve[/203.0.113.11:12733] logged in with entity id 78 at (...)
     #   [Server thread/INFO]: .Kai[/203.0.113.12:0] logged in with entity id 51244 at (...)
+    # This line is preferred over the alternatives, which are unreliable:
+    #   - "X joined the game" is sometimes rewritten to "System chat: X joined
+    #     the game" by a chat plugin, and carries no IP.
+    #   - "[User Authenticator #N/INFO]: UUID of player X is ..." fires on auth
+    #     attempts that can still be rejected by the whitelist.
     case "$line" in
         *"]: "*"[/"*"] logged in with entity id "*)
             rest="${line#*]: }"

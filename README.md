@@ -70,12 +70,18 @@ A systemd service on the server (`mc-alerts.service`) follows
 join: a successful one (`Joined: <name>`) and a rejected, non-whitelisted one
 (`Blocked join: <name>`).
 
-A successful join is taken from the entity line, which carries name and IP for
-Java and Bedrock players:
+A successful join is taken from the entity line, which carries name and IP and
+is written once per join for **Java and Bedrock** players alike:
 
 ```
 [Server thread/INFO]: Steve[/203.0.113.11:12733] logged in with entity id 78 at (...)
 ```
+
+This line is preferred over the other Java-side entries because they are
+unreliable: `Steve joined the game` is sometimes rewritten to
+`System chat: Steve joined the game` by a chat plugin (and has no IP), and
+`[User Authenticator #N/INFO]: UUID of player Steve is ...` also fires for
+auth attempts that the whitelist then rejects.
 
 A rejected join comes from the whitelist rejection line Paper writes:
 
