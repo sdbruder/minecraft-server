@@ -6,9 +6,9 @@ Wants=network-online.target
 [Service]
 User=steve
 Environment=HOME=/home/steve
-# PUSHOVER_TOKEN / PUSHOVER_USER (root-owned, mode 600); optional so the
-# service still starts if the file is missing.
-EnvironmentFile=-/etc/mc-alerts.env
+# PUSHOVER_TOKEN / PUSHOVER_USER (mode 600); optional so the service still
+# starts if the file is missing. Path must be absolute (~ is not expanded).
+EnvironmentFile=-/home/steve/minecraft/mc-alerts.env
 ExecStart=/home/steve/minecraft/scripts/alert-nonwhitelist.sh
 Restart=always
 RestartSec=5

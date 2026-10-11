@@ -42,6 +42,8 @@ fi
 [ -n "${2:-}" ] && REMOTE_DIR="$2"
 
 # Files/dirs to include. Names must not contain spaces.
+# Secrets (mc-alerts.env) are deliberately not listed, so they stay off the
+# committed archive.
 INCLUDES=(
     AutoPlug-Client.jar
     paper.jar

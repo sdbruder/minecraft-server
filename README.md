@@ -115,7 +115,7 @@ and is delayed).
 2. Register an application at <https://pushover.net/apps/build> (name it e.g.
    *Minecraft*); copy its **API Token**.
 3. Copy your **User Key** from the Pushover dashboard.
-4. Put both in `/etc/mc-alerts.env` on the server (root-owned, mode `600`):
+4. Put both in `~/minecraft/mc-alerts.env` on the server (mode `600`):
 
    ```
    PUSHOVER_TOKEN=<app API token>
@@ -126,8 +126,9 @@ and is delayed).
 
 - Source: `scripts/alert-nonwhitelist.sh` (installed at `~/minecraft/scripts/`
   on the server, unit at `/etc/systemd/system/mc-alerts.service`).
-- Credentials live in `/etc/mc-alerts.env` (read by the unit via
-  `EnvironmentFile`), never in this repo.
+- Credentials live in `~/minecraft/mc-alerts.env` (read by the unit via
+  `EnvironmentFile`), never in this repo. The backup's `INCLUDES` list is
+  explicit, so this file is not captured by `scripts/backup.sh`.
 - Blocked joins send at priority *high* (1), joins at normal (0).
 - Same name within 300 s is coalesced into one alert.
 - Every blocked attempt is also appended to `~/minecraft/logs/blocked-joins.log`.
@@ -167,9 +168,9 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 - `scripts/alert-nonwhitelist.sh` now sends through the Pushover API
   (`api.pushover.net/1/messages.json`), which pushes via APNs instantly.
   Blocked joins use priority 1 (high), joins priority 0.
-- Credentials (`PUSHOVER_TOKEN`, `PUSHOVER_USER`) live in `/etc/mc-alerts.env`,
-  loaded by the unit via `EnvironmentFile`; `PUSHOVER_URL` is overridable for
-  tests.
+- Credentials (`PUSHOVER_TOKEN`, `PUSHOVER_USER`) live in
+  `~/minecraft/mc-alerts.env`, loaded by the unit via `EnvironmentFile`;
+  `PUSHOVER_URL` is overridable for tests.
 
 ### 2026-10-11 - Alerts: also notify on successful joins
 
