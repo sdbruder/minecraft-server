@@ -1,0 +1,3 @@
+# Secrets — never commit. The live copy lives on the server at
+# ~/minecraft/mc-alerts.env (see README, "Pushover setup").
+mc-alerts.env
