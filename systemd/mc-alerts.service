@@ -1,5 +1,5 @@
 [Unit]
-Description=Minecraft non-whitelist join alerts (ntfy)
+Description=Minecraft join alerts (ntfy)
 After=network-online.target
 Wants=network-online.target
 

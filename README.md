@@ -43,7 +43,7 @@ Both run as `steve`, start on boot, and are defined in `systemd/` in this repo
 | unit | what |
 |---|---|
 | `autoplug.service` | Runs AutoPlug, the Minecraft server wrapper. Replaces the old `screen` wrapper. |
-| `mc-alerts.service` | The ntfy non-whitelist join alerts. |
+| `mc-alerts.service` | The ntfy join alerts (successful and rejected). |
 
 ```sh
 sudo systemctl start|stop|restart autoplug
@@ -66,8 +66,18 @@ Notes:
 ## Alerts
 
 A systemd service on the server (`mc-alerts.service`) follows
-`logs/latest.log` and pushes an **ntfy** notification to your phone whenever a
-non-whitelisted player tries to join. Paper writes the trigger line:
+`logs/latest.log` and pushes **ntfy** notifications to your phone for every
+join: a successful one (`Joined: <name>`) and a rejected, non-whitelisted one
+(`Blocked join: <name>`).
+
+A successful join is taken from the entity line, which carries name and IP for
+Java and Bedrock players:
+
+```
+[Server thread/INFO]: Steve[/203.0.113.11:12733] logged in with entity id 78 at (...)
+```
+
+A rejected join comes from the whitelist rejection line Paper writes:
 
 ```
 [20:20:10] [Server thread/INFO]: Disconnecting Alex (/203.0.113.10:55658): You are not whitelisted on this server!
@@ -76,7 +86,9 @@ non-whitelisted player tries to join. Paper writes the trigger line:
 Scanners like `FishNet` disconnect during the handshake, before the whitelist
 check, so they never match and are ignored.
 
-**Bedrock (Geyser) players** log differently: the Java-side rejection has no
+**Bedrock (Geyser) players** log differently. On a successful join Floodgate
+prefixes the username with `.` (its `username-prefix`); the script strips the
+dot and marks the alert `(bedrock)`. On a rejection the Java-side line has no
 username, only the IP, and the username appears on a Geyser line. Both are
 handled:
 
@@ -123,6 +135,17 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 (connected players, rejected joins, versions, plugins) on a non-80 port.
 
 ## Changelog
+
+### 2026-10-11 - Alerts: also notify on successful joins
+
+- `scripts/alert-nonwhitelist.sh` now pushes an ntfy alert (`Joined: <name>`)
+  when a player joins, next to the existing `Blocked join:` alert. The trigger
+  is the `NAME[/IP:PORT] logged in with entity id ...` line, which covers Java
+  and Bedrock players and carries the IP.
+- Bedrock names (Floodgate `username-prefix: "."`) are shown without the dot and
+  tagged `(bedrock)`.
+- Join alerts use their own 300 s per-name cooldown, so they do not suppress
+  blocked-join alerts for the same name.
 
 ### 2026-10-10 - Alerts: handle Bedrock (Geyser) rejections
 
