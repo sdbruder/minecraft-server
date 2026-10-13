@@ -43,6 +43,7 @@ One HTML page, served by the server itself, that shows at a glance:
 | Language | **Python 3.12, standard library only** | Already installed; `http.server`, `socket` (RCON), `zipfile` (read `plugin.yml` from jars), `sqlite3`, `base64`, `html` cover everything | Go/Node — not installed, need a toolchain; Python + Flask — a venv and deps for no benefit |
 | Framework | **none** — `ThreadingHTTPServer` + one `BaseHTTPRequestHandler` | No magic, no routing layer to learn | Flask/FastAPI |
 | CSS | **Pico CSS v2, classless variant, vendored** (`dashboard/static/pico.classless.min.css`) | Semantic HTML needs **no classes**, so `render.py` emits plain `<table>`/`<h2>` and the server stays the only place with logic; one ~10 KB file served locally, so no CDN, works offline | hand-written style block; Water.css (plainer tables); Bootstrap (~227 KB, a class on every element); Tailwind (build step) |
+| Layout | **`static/app.css`** (~2.5 KB) on top of Pico, multi-column flow | Pico scales the root font with the viewport (131.25% at ≥1536px) and caps content at 1450px, which reads oversized for a metrics page and wastes a wide screen. The override pins the type size, adds a full-width container and flows the cards into `columns: 5 26rem` — 2 columns on a laptop, 4 at 1920, 5 at 3440 | CSS grid (unequal card heights leave row gaps), masonry (not portable), a class-based framework (markup churn) |
 | Frontend logic | **none** — `<meta http-equiv="refresh">` + server-rendered inline SVG | "Simplest": the server renders everything, including the charts | JS `fetch`/Chart.js/WebSocket |
 | Storage | **SQLite** (`sqlite3`, stdlib) | Embedded, one file, zero services, real SQL for time buckets; enough for a time series of this size | see "Storage" below |
 | Player source (live) | **RCON `list`** on `127.0.0.1:25575` | Authoritative live count + names; no join/leave state to maintain | parsing `latest.log` joins (fragile — a chat plugin rewrites `X joined the game` to `System chat: ...`) |
@@ -172,6 +173,7 @@ dashboard/
   render.py       # HTML + inline SVG
   static/
     pico.classless.min.css   # vendored Pico CSS v2 (no CDN)
+    app.css                  # dense layout + multi-column flow
   ARCHITECTURE.md
 systemd/mc-dashboard.service
 ```

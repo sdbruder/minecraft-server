@@ -162,6 +162,10 @@ curl -s -c /tmp/mc.jar -o /dev/null -d "username=$DASH_USER&password=$DASH_PASS"
 curl -s -b /tmp/mc.jar https://mc.example.com/state.json
 ```
 
+- Layout: `dashboard/static/app.css` overrides Pico's oversized defaults
+  (Pico scales the root font up to 131.25% on wide screens and caps the content
+  at 1450px). Type is pinned at 100% and the panels flow into **1–5 columns**:
+  2 on a laptop, 4 at 1920, 5 at 3440 — the whole dashboard fits one screen.
 - Source: `dashboard/` (`server.py`, `collect.py`, `store.py`, `render.py`);
   design notes in `dashboard/ARCHITECTURE.md`.
 - Python 3 standard library only — no venv, no dependencies, no build step.
@@ -199,6 +203,21 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 (connected players, rejected joins, versions, plugins) on a non-80 port.
 
 ## Changelog
+
+### 2026-10-13 - Dashboard: dense, multi-column layout
+
+- The page read oversized because Pico scales the root font with the viewport
+  (up to **131.25%** at ≥1536px) and caps content at **1450px**, so a wide
+  screen was mostly wasted. `dashboard/static/app.css` pins the type at 100%,
+  tightens spacing, removes the width cap and flows the panels into **1–5
+  columns** (`columns: 5 26rem`): 2 on a laptop, 4 at 1920, 5 at 3440. The full
+  dashboard fits one screen (`1280x900` still scrolls a little).
+- Split the two tallest panels (Sessions, Rejected joins) into five smaller
+  cards, so the columns balance instead of leaving an empty column at ultrawide.
+- Fixed the **Sign out** button stretching the full page width — Pico styles
+  `[type=submit]` and that attribute selector outweighed the override — and
+  gave the stylesheet URL a content hash so a CSS edit is not hidden behind the
+  one-day cache.
 
 ### 2026-10-13 - Dashboard: sign-in form instead of HTTP Basic
 

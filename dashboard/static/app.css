@@ -1,0 +1,119 @@
+/*
+ * Dashboard layout overrides. Loaded after Pico CSS (classless), so these
+ * rules win. Only two hooks are used: body.dash (the metrics page) and
+ * body.login (the sign-in page).
+ */
+
+/* Pico scales the root font with the viewport (100% -> 131.25% at 1536px+)
+   and pads everything generously. Pin the size and tighten the rhythm so a
+   page full of tables reads like a dashboard, not a blog post. */
+:root {
+  --pico-font-size: 100%;
+  --pico-spacing: 0.75rem;
+  --pico-typography-spacing-vertical: 0.5rem;
+  --pico-block-spacing-vertical: 0.7rem;
+  --pico-block-spacing-horizontal: 0.9rem;
+  --pico-form-element-spacing-vertical: 0.5rem;
+  --pico-line-height: 1.35;
+}
+
+/* Pico caps the content at 1450px; a wide screen should be usable instead. */
+body > header,
+body > main,
+body > footer {
+  max-width: none;
+  padding-inline: clamp(0.6rem, 1.2vw, 1.25rem);
+}
+
+body > header {
+  padding-block: 0.6rem 0.2rem;
+}
+body > header h1 {
+  font-size: 1.3rem;
+  margin-bottom: 0.1rem;
+}
+body > header p {
+  font-size: 0.8rem;
+  margin-bottom: 0;
+}
+
+body > footer {
+  padding-block: 0.6rem 1rem;
+  font-size: 0.78rem;
+}
+body > footer p {
+  margin-bottom: 0.4rem;
+}
+body > footer form {
+  display: inline;
+}
+/* Needs the [type] attribute in the selector: Pico styles
+   `[type=submit], button` and that attribute selector outweighs plain
+   `button`. */
+body > footer button[type="submit"] {
+  width: auto;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  margin-bottom: 0;
+}
+
+/* ---- metrics page: multi-column flow ------------------------------------
+ * `column-width: 26rem` fits 1 column on a phone, 2 on a laptop, 3-5 on a
+ * wide/ultrawide screen; `column-count: 5` caps it so columns never get
+ * too narrow. Panels are independent, so column-major order is fine and the
+ * flow packs them with no gaps. */
+body.dash > main {
+  columns: 5 26rem;
+  column-gap: 0.8rem;
+  margin-top: 0.4rem;
+}
+body.dash > main > article {
+  break-inside: avoid;
+  margin-block: 0 0.8rem;
+}
+
+body.dash article h2 {
+  --pico-typography-spacing-top: 0;
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+}
+body.dash article h3 {
+  --pico-typography-spacing-top: 0.7rem;
+  font-size: 0.78rem;
+  margin-bottom: 0.25rem;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Compact tables that never overflow a narrow column. */
+body.dash article table {
+  font-size: 0.78rem;
+  width: 100%;
+}
+body.dash article th,
+body.dash article td {
+  padding: 0.22rem 0.4rem;
+}
+body.dash article td {
+  overflow-wrap: anywhere;
+}
+body.dash article p {
+  font-size: 0.82rem;
+}
+
+/* ---- sign-in page: one narrow, centred card ---------------------------- */
+body.login > main {
+  max-width: 24rem;
+  margin-inline: auto;
+  padding-top: 1rem;
+}
+
+@media (max-width: 30rem) {
+  body > main {
+    padding-inline: 0.4rem;
+  }
+  body.dash > main {
+    column-gap: 0.5rem;
+  }
+}

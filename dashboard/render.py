@@ -17,8 +17,9 @@ PAGE = """<!doctype html>
 <meta http-equiv="refresh" content="{refresh}">
 <title>{title}</title>
 <link rel="stylesheet" href="/static/pico.classless.min.css">
+<link rel="stylesheet" href="/static/app.css?v={asset_v}">
 </head>
-<body>
+<body class="dash">
 <header>
   <h1>{heading}</h1>
   <p>{subtitle}</p>
@@ -43,8 +44,9 @@ LOGIN_PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · Minecraft família</title>
 <link rel="stylesheet" href="/static/pico.classless.min.css">
+<link rel="stylesheet" href="/static/app.css?v={asset_v}">
 </head>
-<body>
+<body class="login">
 <header>
   <h1>Minecraft — família</h1>
   <p>Sign in to see the server dashboard.</p>
@@ -165,40 +167,42 @@ def _players_panel(players):
 
 def _history_panel(history):
     points = [(_clock(ts), n) for ts, n in history.get("series") or []]
-    return _article("Players online — last 24 h", bar_chart(points, unit=" online"))
+    return _article("Players online — last 24 h",
+                    bar_chart(points, width=640, height=170, unit=" online"))
+
+
+def _playtime_panel(history):
+    rows = [
+        (player, f"{seconds // 3600}h {seconds % 3600 // 60:02d}m")
+        for player, seconds in (history.get("playtime") or [])
+    ]
+    return _article("Most played — last 7 days", _table(["player", "played"], rows))
 
 
 def _sessions_panel(history):
-    playtime = history.get("playtime") or []
-    rows = [
-        (player, f"{seconds // 3600}h {seconds % 3600 // 60:02d}m")
-        for player, seconds in playtime
-    ]
-    table = _table(["player", "time played (7 d)"], rows)
     recent = [
         (_clock(item["ts"], with_date=True, seconds=True), item["player"], item["event"])
         for item in (history.get("sessions") or [])
     ]
-    events = _table(["when", "player", "event"], recent)
-    return _article("Sessions", f"<h3>Most played — last 7 days</h3>\n{table}\n<h3>Recent joins / leaves</h3>\n{events}")
+    return _article("Recent joins / leaves", _table(["when", "player", "event"], recent))
 
 
-def _rejects_panel(history):
-    recent = [
+def _rejects_recent_panel(history):
+    rows = [
         (item["ts_iso"] or item["ts"], item["name"], item["ip"])
         for item in (history.get("recent_rejects") or [])
     ]
-    top = [(name, ip, n) for name, ip, n in (history.get("top") or [])]
-    per_day = [(day[5:], n) for day, n in (history.get("per_day") or [])]
-    return _article(
-        "Rejected joins (not whitelisted)",
-        "<h3>Most recent</h3>\n"
-        + _table(["when (UTC)", "name", "ip"], recent)
-        + "<h3>Per day — last 30 days</h3>\n"
-        + bar_chart(per_day, unit=" rejected")
-        + "<h3>Most frequent</h3>\n"
-        + _table(["name", "ip", "attempts"], top),
-    )
+    return _article("Rejected joins — most recent", _table(["when (UTC)", "name", "ip"], rows))
+
+
+def _rejects_daily_panel(history):
+    points = [(day[5:], n) for day, n in (history.get("per_day") or [])]
+    return _article("Rejected joins — per day (30 d)", bar_chart(points, width=640, height=170, unit=" rejected"))
+
+
+def _rejects_top_panel(history):
+    rows = [(name, ip, n) for name, ip, n in (history.get("top") or [])]
+    return _article("Rejected joins — most frequent", _table(["name", "ip", "attempts"], rows))
 
 
 def _perf_panel(perf):
@@ -242,7 +246,7 @@ def _errors_panel(errors):
     return _article("Problems", f"<ul>{items}</ul>")
 
 
-def page(state, refresh=15):
+def page(state, refresh=15, asset_v="0"):
     generated = state.get("generated") or time.time()
     players = state.get("players") or {}
     count, maximum = players.get("count"), players.get("max")
@@ -255,8 +259,11 @@ def page(state, refresh=15):
     body = "".join([
         _players_panel(players),
         _history_panel(history),
+        _playtime_panel(history),
         _sessions_panel(history),
-        _rejects_panel(history),
+        _rejects_recent_panel(history),
+        _rejects_daily_panel(history),
+        _rejects_top_panel(history),
         _perf_panel(state.get("perf") or {}),
         _server_panel(state),
         _plugins_panel(state),
@@ -264,6 +271,7 @@ def page(state, refresh=15):
     ])
     return PAGE.format(
         refresh=refresh,
+        asset_v=asset_v,
         title="Minecraft — família",
         heading="Minecraft — família",
         subtitle=f"host.example.com · {esc(summary)} · updated {_clock(generated, with_date=True, seconds=True)} UTC",
@@ -271,6 +279,6 @@ def page(state, refresh=15):
     )
 
 
-def login_page(error=None, next_path="/"):
+def login_page(error=None, next_path="/", asset_v="0"):
     message = f"<p><strong>{esc(error)}</strong></p>\n" if error else ""
-    return LOGIN_PAGE.format(error=message, next=esc(next_path))
+    return LOGIN_PAGE.format(error=message, next=esc(next_path), asset_v=asset_v)

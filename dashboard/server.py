@@ -45,7 +45,14 @@ PLUGINS_DIR = MC_DIR / "plugins"
 
 LIVE_TTL = 5.0          # seconds a live snapshot is reused
 WORLD_TTL = 600.0       # seconds the world size is reused (walking is slow)
-STATIC_OK = {"pico.classless.min.css"}
+STATIC_OK = {"pico.classless.min.css", "app.css"}
+
+# Stylesheets are served with a long max-age, so the URL carries a content
+# hash: editing app.css changes the URL and busts the browser cache.
+try:
+    ASSET_VERSION = hashlib.sha256((BASE / "static" / "app.css").read_bytes()).hexdigest()[:8]
+except OSError:
+    ASSET_VERSION = "0"
 
 SESSION_TTL = int(os.environ.get("DASH_SESSION_TTL", 30 * 24 * 3600))
 SESSION_COOKIE = "mc_session"
@@ -384,14 +391,16 @@ class Handler(BaseHTTPRequestHandler):
             if self._session_user():
                 self._redirect("/")
             else:
-                self._send(200, render.login_page(next_path=safe_next(self._query("next"))),
+                self._send(200, render.login_page(next_path=safe_next(self._query("next")),
+                                                  asset_v=ASSET_VERSION),
                            "text/html; charset=utf-8")
             return
         if not self._session_user():
             self._redirect(f"{LOGIN_URL}?next={quote(path, safe='/')}")
             return
         if path == "/":
-            self._send(200, render.page(full_state(), REFRESH), "text/html; charset=utf-8")
+            self._send(200, render.page(full_state(), REFRESH, asset_v=ASSET_VERSION),
+                       "text/html; charset=utf-8")
         elif path == "/state.json":
             self._send(200, json.dumps(full_state(), indent=2, sort_keys=True, default=str),
                        "application/json; charset=utf-8")
