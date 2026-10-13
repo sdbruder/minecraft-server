@@ -4,7 +4,8 @@
 
 ### Web dashboard for server metrics
 
-Status: not started.
+Status: design proposal — see `dashboard/ARCHITECTURE.md`. Awaiting the two
+open decisions (exposure, optional panels) before implementation.
 
 Run a small, read-only web dashboard on a **non-80 port** (e.g. `8080`) so the
 server metrics stay visible at a glance.
