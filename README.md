@@ -137,8 +137,9 @@ and is delayed).
 
 ## Dashboard
 
-Read-only metrics at **<https://mc.example.com>** (HTTP Basic auth). One page,
-refreshed every 15 s, with no JavaScript:
+Read-only metrics at **<https://mc.example.com>**. Sign in with the usual
+username/password **form** (`/login`), so a password manager can save it — no
+browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
 
 - players online (Java and Bedrock) plus a 24 h chart;
 - play sessions, playtime and recent joins/leaves;
@@ -146,8 +147,20 @@ refreshed every 15 s, with no JavaScript:
 - TPS/MSPT, server uptime, MOTD, world + size, versions, plugins.
 
 `GET /state.json` returns the same data as JSON; `GET /healthz` is the check
-endpoint. Nothing is written to the game — the only RCON commands used are
-`list`, `tps` and `mspt`.
+endpoint (no auth). Nothing is written to the game — the only RCON commands used
+are `list`, `tps` and `mspt`.
+
+**Auth.** Both login credentials live in `DASH_USER` / `DASH_PASS`. A successful
+login sets `mc_session`: an HMAC-signed cookie (key derived from the password),
+`HttpOnly`, `SameSite=Lax`, 30-day expiry, and `Secure` whenever the request
+arrived over TLS. Changing the password invalidates every session. Log in
+failures are throttled (10 per IP per 15 min). Scripting uses a cookie jar:
+
+```sh
+curl -s -c /tmp/mc.jar -o /dev/null -d "username=$DASH_USER&password=$DASH_PASS" \
+     https://mc.example.com/login
+curl -s -b /tmp/mc.jar https://mc.example.com/state.json
+```
 
 - Source: `dashboard/` (`server.py`, `collect.py`, `store.py`, `render.py`);
   design notes in `dashboard/ARCHITECTURE.md`.
@@ -186,6 +199,23 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 (connected players, rejected joins, versions, plugins) on a non-80 port.
 
 ## Changelog
+
+### 2026-10-13 - Dashboard: sign-in form instead of HTTP Basic
+
+- The dashboard now has a real login page (`/login`): labelled username and
+  password fields with `autocomplete="username"` / `"current-password"` and a
+  submit button, so password managers can save the credentials. HTTP Basic was
+  never saved by them.
+- Successful login sets `mc_session`, an HMAC-signed cookie (key derived from
+  `DASH_PASS`, so changing the password signs everyone out): `HttpOnly`,
+  `SameSite=Lax`, `Secure` behind TLS, 30-day expiry. A **Sign out** button was
+  added to the page footer.
+- Added: 10-per-IP/15-min login throttle, an `Origin`/`Host` check on POSTs,
+  and same-site-only redirect targets.
+- Fixed a real bug found while testing: `Referrer-Policy: no-referrer` made
+  Chromium send `Origin: null` on form POSTs, which the CSRF check rejected
+  (`403`). The policy is now `same-origin` — no referrer reaches third parties,
+  but the `Origin` stays usable.
 
 ### 2026-10-13 - Read-only web dashboard at mc.example.com
 

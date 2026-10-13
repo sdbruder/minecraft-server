@@ -49,7 +49,7 @@ One HTML page, served by the server itself, that shows at a glance:
 | Player history | **RCON `list` sampled every 30 s, diffed** | Robust: exact names from RCON, transitions derived from consecutive samples (±30 s) | log-derived sessions (same fragility), player-event plugins |
 | Rejected source | **`logs/blocked-joins.log`**, ingested into SQLite | Already written by `scripts/alert-nonwhitelist.sh`, append-only, tab-separated `ts/name/ip/iso`; ingest by byte offset is idempotent | re-parsing whitelist lines from the live log |
 | Versions | **log head + `plugins/*.jar` `plugin.yml`** | No extra tooling; `zipfile` reads the manifest in-process | `unzip`/shelling out |
-| Auth | **HTTP Basic in-app**, credentials in an env file | One place, works with or without nginx; constant-time compare | nginx-only auth, no auth |
+| Auth | **Sign-in form (`/login`) + HMAC-signed session cookie** | A real form with labelled `username`/`current-password` fields is what password managers save; Basic auth is not saved. Cookie: `HttpOnly`, `SameSite=Lax`, `Secure` behind TLS, 30-day expiry, key derived from the password (so a password change logs everyone out) | HTTP Basic (not saved by password managers), nginx-only auth, no auth |
 | Rendering | **server-side string + `html.escape`** | No template engine needed | Jinja2 |
 
 ## Storage (the "TSDB" question)
@@ -146,11 +146,19 @@ the app ever writes.
 | `GET` | `/state.json` | same data as JSON, for scripting |
 | `GET` | `/static/pico.classless.min.css` | the vendored stylesheet |
 | `GET` | `/healthz` | `ok` — for systemd/nginx checks |
+| `GET` | `/login` | the sign-in form (redirects to `/` when already signed in) |
+| `POST` | `/login` | checks credentials → `302` + session cookie, or `401` with the form and an error |
+| `POST` | `/logout` | clears the cookie → `302 /login` |
 | any other | `*` | `405` / `404`, no body |
 
-- Auth: `Authorization: Basic …` on every path except `/healthz` and
-  `/static/` (the vendored stylesheet is not sensitive). Missing/wrong → `401`
-  with `WWW-Authenticate`.
+- Auth: the `mc_session` cookie on every path except `/healthz`, `/static/`
+  (the stylesheet is not sensitive) and `/login`. Missing or invalid → `302` to
+  `/login?next=<path>`.
+- POSTs are guarded by `SameSite=Lax` plus an `Origin`/`Host` check: a
+  verifiable cross-site origin is rejected with `403`, while an opaque `null`
+  origin is accepted (Chromium sends it when the referrer policy hides the
+  origin — hence `Referrer-Policy: same-origin`, not `no-referrer`).
+- Failed logins are throttled per client IP (10 per 15 min → `429`).
 - Per-collector `try/except` + RCON timeout: one failing source degrades one
   panel, never the whole page.
 

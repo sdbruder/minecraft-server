@@ -28,7 +28,44 @@ PAGE = """<!doctype html>
 </main>
 <footer>
   <p><small>Read-only. <a href="/state.json">state.json</a> · refreshed every {refresh} s · times in UTC</small></p>
+  <form method="post" action="/logout"><button type="submit">Sign out</button></form>
 </footer>
+</body>
+</html>
+"""
+
+# Password-manager friendly: a real form, a stable URL (/login), labelled
+# username/password fields and the standard autocomplete hints.
+LOGIN_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · Minecraft família</title>
+<link rel="stylesheet" href="/static/pico.classless.min.css">
+</head>
+<body>
+<header>
+  <h1>Minecraft — família</h1>
+  <p>Sign in to see the server dashboard.</p>
+</header>
+<main>
+<article>
+{error}<form method="post" action="/login">
+  <input type="hidden" name="next" value="{next}">
+  <label for="username">Username
+  <input type="text" id="username" name="username" autocomplete="username"
+         autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus>
+  </label>
+  <label for="password">Password
+  <input type="password" id="password" name="password"
+         autocomplete="current-password" required>
+  </label>
+  <button type="submit">Sign in</button>
+</form>
+</article>
+</main>
+<footer><p><small>Read-only server metrics.</small></p></footer>
 </body>
 </html>
 """
@@ -232,3 +269,8 @@ def page(state, refresh=15):
         subtitle=f"host.example.com · {esc(summary)} · updated {_clock(generated, with_date=True, seconds=True)} UTC",
         body=body,
     )
+
+
+def login_page(error=None, next_path="/"):
+    message = f"<p><strong>{esc(error)}</strong></p>\n" if error else ""
+    return LOGIN_PAGE.format(error=message, next=esc(next_path))
