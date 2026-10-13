@@ -44,6 +44,7 @@ Both run as `steve`, start on boot, and are defined in `systemd/` in this repo
 |---|---|
 | `autoplug.service` | Runs AutoPlug, the Minecraft server wrapper. Replaces the old `screen` wrapper. |
 | `mc-alerts.service` | The Pushover join alerts (successful and rejected). |
+| `mc-dashboard.service` | The read-only web dashboard (behind nginx at `mc.example.com`). |
 
 ```sh
 sudo systemctl start|stop|restart autoplug
@@ -134,6 +135,32 @@ and is delayed).
 - Every blocked attempt is also appended to `~/minecraft/logs/blocked-joins.log`.
 - Manage it: `sudo systemctl status|stop|restart mc-alerts`.
 
+## Dashboard
+
+Read-only metrics at **<https://mc.example.com>** (HTTP Basic auth). One page,
+refreshed every 15 s, with no JavaScript:
+
+- players online (Java and Bedrock) plus a 24 h chart;
+- play sessions, playtime and recent joins/leaves;
+- rejected (non-whitelisted) joins: recent list, per-day chart, most frequent;
+- TPS/MSPT, server uptime, MOTD, world + size, versions, plugins.
+
+`GET /state.json` returns the same data as JSON; `GET /healthz` is the check
+endpoint. Nothing is written to the game — the only RCON commands used are
+`list`, `tps` and `mspt`.
+
+- Source: `dashboard/` (`server.py`, `collect.py`, `store.py`, `render.py`);
+  design notes in `dashboard/ARCHITECTURE.md`.
+- Python 3 standard library only — no venv, no dependencies, no build step.
+- History lives in `~/minecraft/dashboard.sqlite` (30 s samples, 90-day
+  retention) and is disposable: delete the file to start over.
+- Settings and credentials come from `~/minecraft/dashboard.env` (mode 600,
+  git-ignored): `DASH_USER`, `DASH_PASS`, `DASH_PORT`, … The RCON password is
+  read from `server.properties` and never leaves the server.
+- Serving: nginx vhost `nginx/mc.example.com.conf` proxies to
+  `127.0.0.1:8080` and reuses the `*.example.com` certificate.
+- Manage it: `sudo systemctl status|restart mc-dashboard`.
+
 ## Version pin (important)
 
 AutoPlug updates the server jar automatically. The target version is set in
@@ -159,6 +186,21 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 (connected players, rejected joins, versions, plugins) on a non-80 port.
 
 ## Changelog
+
+### 2026-10-13 - Read-only web dashboard at mc.example.com
+
+- New `mc-dashboard.service`: a read-only page with players, sessions/playtime,
+  rejected joins, TPS/MSPT + uptime, world/MOTD, versions and plugins, plus
+  `GET /state.json` and `GET /healthz`.
+- Python 3 standard library only (`dashboard/`), no framework and no client
+  JavaScript; charts are inline SVG, styling is vendored Pico CSS (classless).
+- History in SQLite (`~/minecraft/dashboard.sqlite`): a 30 s sampler diffs RCON
+  `list` into join/leave events and ingests `blocked-joins.log`; 90-day
+  retention.
+- HTTP Basic auth (credentials in `~/minecraft/dashboard.env`). Exposed only
+  through nginx on `mc.example.com` (vhost in `nginx/`), proxying
+  `127.0.0.1:8080`.
+- Design notes: `dashboard/ARCHITECTURE.md`.
 
 ### 2026-10-11 - Alerts: switch from ntfy to Pushover
 

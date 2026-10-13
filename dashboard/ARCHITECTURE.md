@@ -1,7 +1,8 @@
-# Dashboard — architecture (proposal)
+# Dashboard — architecture
 
 Read-only web page for the Minecraft server, with a short history of players and
-rejected joins. This document is the design; it is not implemented yet.
+rejected joins. This is the agreed design; it was implemented on 2026-10-13
+(see the README, "Dashboard").
 
 ## Goal
 
@@ -41,7 +42,7 @@ One HTML page, served by the server itself, that shows at a glance:
 |---|---|---|---|
 | Language | **Python 3.12, standard library only** | Already installed; `http.server`, `socket` (RCON), `zipfile` (read `plugin.yml` from jars), `sqlite3`, `base64`, `html` cover everything | Go/Node — not installed, need a toolchain; Python + Flask — a venv and deps for no benefit |
 | Framework | **none** — `ThreadingHTTPServer` + one `BaseHTTPRequestHandler` | No magic, no routing layer to learn | Flask/FastAPI |
-| CSS | **none** — one hand-written `<style>` block | Three tables and two charts don't need a library; no CDN means it works offline and leaks nothing | Tailwind/Bootstrap (build step or external CDN) |
+| CSS | **Pico CSS v2, classless variant, vendored** (`dashboard/static/pico.classless.min.css`) | Semantic HTML needs **no classes**, so `render.py` emits plain `<table>`/`<h2>` and the server stays the only place with logic; one ~10 KB file served locally, so no CDN, works offline | hand-written style block; Water.css (plainer tables); Bootstrap (~227 KB, a class on every element); Tailwind (build step) |
 | Frontend logic | **none** — `<meta http-equiv="refresh">` + server-rendered inline SVG | "Simplest": the server renders everything, including the charts | JS `fetch`/Chart.js/WebSocket |
 | Storage | **SQLite** (`sqlite3`, stdlib) | Embedded, one file, zero services, real SQL for time buckets; enough for a time series of this size | see "Storage" below |
 | Player source (live) | **RCON `list`** on `127.0.0.1:25575` | Authoritative live count + names; no join/leave state to maintain | parsing `latest.log` joins (fragile — a chat plugin rewrites `X joined the game` to `System chat: ...`) |
@@ -143,11 +144,13 @@ the app ever writes.
 |---|---|---|
 | `GET` | `/` | the HTML page (all panels) |
 | `GET` | `/state.json` | same data as JSON, for scripting |
+| `GET` | `/static/pico.classless.min.css` | the vendored stylesheet |
 | `GET` | `/healthz` | `ok` — for systemd/nginx checks |
 | any other | `*` | `405` / `404`, no body |
 
-- Auth: `Authorization: Basic …` on every path except `/healthz`. Missing/wrong
-  → `401` with `WWW-Authenticate`.
+- Auth: `Authorization: Basic …` on every path except `/healthz` and
+  `/static/` (the vendored stylesheet is not sensitive). Missing/wrong → `401`
+  with `WWW-Authenticate`.
 - Per-collector `try/except` + RCON timeout: one failing source degrades one
   panel, never the whole page.
 
@@ -159,6 +162,8 @@ dashboard/
   collect.py      # RCON + file readers (live data)
   store.py        # SQLite schema, ingest, queries (history)
   render.py       # HTML + inline SVG
+  static/
+    pico.classless.min.css   # vendored Pico CSS v2 (no CDN)
   ARCHITECTURE.md
 systemd/mc-dashboard.service
 ```
@@ -170,8 +175,9 @@ systemd/mc-dashboard.service
   doesn't block the page).
 - Hardening: `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=full`,
   `ProtectKernelTunables=yes`, `ProtectControlGroups=yes`,
-  `RestrictAddressFamilies=AF_INET AF_INET6`. **Not** `ProtectHome` (the app
-  must read/write `~/minecraft`).
+  `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX` (the last one for
+  `systemctl show`). **Not** `ProtectHome` (the app must read/write
+  `~/minecraft`).
 - Deployment = copy `dashboard/` + the unit, `daemon-reload`, `restart`; plus an
   nginx `server` block for `mc.example.com` with `proxy_pass
   http://127.0.0.1:8080` and the existing `*.example.com` certificate.
@@ -207,9 +213,12 @@ server-side.
 | `latest.log` rotated mid-read | versions keep last good value | non-fatal |
 | reload storm | extra RCON calls | cache collector results ~5 s |
 
-## Open questions
+## Decisions taken (2026-10-13)
 
-1. **Storage** — SQLite embedded (recommended), or Prometheus + Grafana, or
-   reuse the running MariaDB/Redis?
-2. **Retention & cadence** — 90 days at a 30 s sample is fine, or do you want a
-   different window / interval?
+- Runtime: Python 3 standard library. CSS: Pico CSS v2, classless, vendored.
+- Storage: SQLite embedded at `~/minecraft/dashboard.sqlite`.
+- Cadence and retention: 30 s samples, 90 days.
+- Exposure: nginx + HTTPS at `mc.example.com` (vhost in `nginx/`); the app
+  binds `127.0.0.1:8080` only.
+- Extras included: TPS/MSPT + uptime, world size, `/state.json`, and the player
+  and rejected-join history.

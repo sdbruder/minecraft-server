@@ -1,0 +1,27 @@
+[Unit]
+Description=Minecraft dashboard (read-only web metrics)
+Wants=network-online.target
+After=network-online.target autoplug.service
+
+[Service]
+User=steve
+Environment=HOME=/home/steve
+# DASH_USER / DASH_PASS / DASH_BIND / DASH_PORT / MC_DIR / REFRESH /
+# SAMPLE_SECONDS / RETAIN_DAYS (mode 600); optional so the unit still starts.
+EnvironmentFile=-/home/steve/minecraft/dashboard.env
+ExecStart=/usr/bin/python3 /home/steve/minecraft/dashboard/server.py
+Restart=always
+RestartSec=5
+
+# Read-only web app: cannot escalate, cannot touch system dirs. It reads/writes
+# only under ~/minecraft, so ProtectHome must stay off. AF_UNIX is needed for
+# `systemctl show` (server uptime).
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

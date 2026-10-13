@@ -1,3 +1,11 @@
-# Secrets — never commit. The live copy lives on the server at
-# ~/minecraft/mc-alerts.env (see README, "Pushover setup").
+# Secrets — never commit. Live copies live on the server at
+# ~/minecraft/mc-alerts.env and ~/minecraft/dashboard.env.
 mc-alerts.env
+dashboard.env
+
+# Runtime state (see README, "Dashboard").
+dashboard.sqlite
+dashboard.sqlite-wal
+dashboard.sqlite-shm
+__pycache__/
+*.pyc
