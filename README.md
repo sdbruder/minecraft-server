@@ -204,6 +204,30 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 
 ## Changelog
 
+### 2026-10-15 - Disk cleanup and leaner AutoPlug backups
+
+- Freed **~5 GB** on the server (`/` went 20G → 16G used, 56% → 44%). The
+  dominant cost was `autoplug/backups`: 7 daily zips of ~890 MB each, of which
+  ~60% was re-downloadable content (libraries 189 MB, cache 167 MB, versions
+  107 MB, `server.jar` 59 MB, `spigot.jar` 11 MB).
+- `autoplug/backup.yml`: those paths (plus `./AutoPlug-Files.zip`, `./dashboard`)
+  added to `exclude`, so a new archive holds only the world, plugins and configs
+  (~360 MB, measured composition — pending confirmation at the next 05:00 run).
+  `max-days` 7 → 3. Old file kept as `autoplug/backup.yml.pre-disk-cleanup.bak`.
+- Existing archives pruned to the 3 newest: `autoplug/backups` 6.5 GB → 2.7 GB.
+- Deleted stale/unused files, all re-downloadable or superseded:
+  `cache/mojang_{1.21.1,26.3}.jar` (110 MB — Geyser re-fetches on demand;
+  `mojang_26.2.jar` kept), `versions/{26.3,1.21.1}` (80 MB; `versions/26.2`
+  kept), `plugins/Geyser-Spigot.jar.pre-1251.bak` (45 MB, superseded by the
+  live jar), `server.jar` (61 MB — the server runs `java -jar paper.jar`, and
+  `shared-files.yml` is `enable: false`), `spigot.jar` (11 MB, unreferenced),
+  and AutoPlug's verbose logs for two older days (97 MB).
+- Not touched: `família/` (the world), `paper.jar`, `AutoPlug-Client.jar`,
+  `libraries/`, `autoplug/system/jre`, the live plugin jars.
+- `autoplug` was restarted to load the new config (~30 s downtime, 0 players
+  online at the time); verified back up with `Done (31.866s)` and a working
+  RCON `list`.
+
 ### 2026-10-13 - Dashboard: dense, multi-column layout
 
 - The page read oversized because Pico scales the root font with the viewport
