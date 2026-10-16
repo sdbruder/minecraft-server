@@ -2,6 +2,7 @@
 # ~/minecraft/mc-alerts.env and ~/minecraft/dashboard.env.
 mc-alerts.env
 dashboard.env
+storagebox.env
 
 # Runtime state (see README, "Dashboard").
 dashboard.sqlite

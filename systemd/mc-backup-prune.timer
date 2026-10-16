@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily prune of old Minecraft backups on the Storage Box
+
+[Timer]
+# AutoPlug creates its archive at 05:00 (server time); give the upload an hour.
+OnCalendar=*-*-* 06:30:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

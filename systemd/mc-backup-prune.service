@@ -1,0 +1,13 @@
+[Unit]
+Description=Prune old Minecraft backup archives from the Hetzner Storage Box
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=steve
+Environment=HOME=/home/steve
+# SB_HOST / SB_USER / SB_KEY / SB_PATH / SB_RETAIN_DAYS (mode 600); optional so
+# the unit still starts when the file is missing.
+EnvironmentFile=-/home/steve/minecraft/storagebox.env
+ExecStart=/home/steve/minecraft/scripts/backup-prune.sh

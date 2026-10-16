@@ -35,16 +35,71 @@ It streams a `tar.gz` from the remote host into the repo root as
 `minecraft-essentials-<date>.tar.gz`. Override with `REMOTE`, `REMOTE_DIR`,
 `OUT_DIR` or `STAMP` env vars, or pass the host/dir as arguments.
 
+## Backups
+
+> Status: the local archive + pruning job are in place. The Storage Box upload
+> below still needs the box's host/username and one forced backup to confirm
+> (see `upload.*` in the table).
+
+Two independent things keep the world safe.
+
+**AutoPlug's daily archive** (05:00 server time) is written to
+`~/minecraft/autoplug/backups` and kept for `backup.max-days: 3` (~1.1 GB). Its
+`exclude` list drops everything re-downloadable (`cache`, `libraries`,
+`versions`, `server.jar`, `spigot.jar`, `AutoPlug-Files.zip`, `dashboard`), so
+an archive is ~360 MB instead of ~890 MB. Config: `~/minecraft/autoplug/backup.yml`.
+
+**Offsite copy:** AutoPlug uploads each archive to a Hetzner **Storage Box**
+over SFTP. Note it has **no S3 support** — its uploader speaks FTPS/SFTP or
+Google Drive only (verified against AutoPlug 10.2.0: the config has no
+provider/endpoint/bucket keys, and the jar bundles no AWS SDK). Key auth, so no
+password is stored anywhere.
+
+| setting | value |
+|---|---|
+| `upload.enable` | `true` |
+| `upload.host` / `upload.port` / `upload.username` | the Storage Box, `22`, `uXXXXX` |
+| `upload.path` | `minecraft` |
+| `upload.rsa-key-path` | `/home/steve/.ssh/id_rsa_storagebox` |
+| `upload.delete-on-complete` | `false` — the local 3-day window stays |
+
+A non-empty `rsa-key-path` is what makes AutoPlug use SFTP instead of FTPS. The
+key pair is `~/.ssh/id_rsa_storagebox` (RSA 4096 — the `jsch` bundled in the
+client predates ed25519); the public half is registered on the box.
+
+**Pruning the remote:** AutoPlug prunes its local directory but never the
+remote one, so `mc-backup-prune.timer` runs `scripts/backup-prune.sh` daily at
+06:30 and deletes archives older than `SB_RETAIN_DAYS`. Dates come from the
+file names (`YYYY-MM-DD-HH.MM-BACKUP.zip`), and only names matching that pattern
+are ever touched.
+
+```sh
+scripts/backup-prune.sh --dry-run            # list what would be deleted
+systemctl list-timers mc-backup-prune.timer
+journalctl -u mc-backup-prune
+```
+
+Credentials for it live in `~/minecraft/storagebox.env` (mode 600, git-ignored):
+
+```
+SB_HOST=uXXXXX.your-storagebox.de
+SB_USER=uXXXXX
+SB_KEY=/home/steve/.ssh/id_rsa_storagebox
+SB_PATH=minecraft
+SB_RETAIN_DAYS=30
+```
+
 ## Services (systemd)
 
-Both run as `steve`, start on boot, and are defined in `systemd/` in this repo
-(installed to `/etc/systemd/system/`).
+They all run as `steve`, start on boot, and are defined in `systemd/` in this
+repo (installed to `/etc/systemd/system/`).
 
 | unit | what |
 |---|---|
 | `autoplug.service` | Runs AutoPlug, the Minecraft server wrapper. Replaces the old `screen` wrapper. |
 | `mc-alerts.service` | The Pushover join alerts (successful and rejected). |
 | `mc-dashboard.service` | The read-only web dashboard (behind nginx at `mc.example.com`). |
+| `mc-backup-prune.timer` | Daily prune of old backup archives on the Storage Box. |
 
 ```sh
 sudo systemctl start|stop|restart autoplug
