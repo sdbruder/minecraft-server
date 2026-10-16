@@ -151,6 +151,11 @@ never joined (FishNet and friends — 113 such lines in the current logs) emit i
 too, and a real quit usually logs both lines, so it would alert on bots and
 double-alert on players.
 
+The leave alert reports the session length when the matching join was seen:
+`Left: Steve` — `Steve (java) left the server at 20:22:00 UTC after 1h 12m`.
+That is per-process memory, so a leave for somebody who joined before a restart
+just omits the duration.
+
 A rejected join comes from the whitelist rejection line Paper writes:
 
 ```
@@ -283,9 +288,14 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
   connection` lines, of which 113 are FishNet.
 - Joins and leaves keep separate per-name cooldowns, so a leave right after a
   join is never swallowed by the join.
-- Verified by a 98-line matrix (9/9 checks) and by replaying all 59,784 lines of
-  the server's logs: 124 join alerts = 124 entity lines, 122 leave alerts = 122
-  `left the game` lines, 8 blocked alerts = 8 rejection lines.
+- The leave alert reports the session length when the join was seen
+  (`… left the server at 00:00:03 UTC after 3s`). Tracking happens even when the
+  join alert itself was coalesced, and is dropped once the player leaves; after
+  a restart the duration is simply omitted.
+- Verified: 9/9 on a synthetic alert matrix, 7/7 on the duration behaviour
+  (incl. `format_duration` boundaries), and a replay of all ~59.8k lines of the
+  server logs — 124 join alerts = 124 entity lines, 122 leave alerts = 122
+  `left the game` lines, 8 blocked alerts = 8 rejection lines, zero non-200s.
 
 ### 2026-10-15 - Disk cleanup and leaner AutoPlug backups
 

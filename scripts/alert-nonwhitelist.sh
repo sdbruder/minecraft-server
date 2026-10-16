@@ -19,6 +19,11 @@
 #   [Server thread/INFO]: Steve left the game
 #   [Server thread/INFO]: System chat: Steve left the game
 #
+# When this process saw the matching join, the alert also reports the session
+# length: "Left: Steve" - "Steve (java) left the server at 20:22:00 UTC
+# after 1h 12m". That is per-process memory, so a leave for someone who joined
+# before a restart simply omits the duration.
+#
 # The other candidate, "NAME lost connection: Disconnected", is deliberately
 # NOT used: scanners that never join (FishNet and friends) emit it too, and a
 # real quit usually logs both lines, so it would mean alerts for bots and
@@ -74,10 +79,22 @@ fi
 declare -A last_seen=()
 declare -A last_join=()
 declare -A last_left=()
+declare -A joined_at=()   # name -> epoch of the observed join, for the duration
 last_bedrock_ip=""
 last_bedrock_ts=0
 
 valid_name() { [[ "$1" =~ ^[A-Za-z0-9_.]{1,16}$ ]]; }
+
+format_duration() {
+    local secs="$1"
+    if [ "$secs" -lt 60 ]; then
+        echo "${secs}s"
+    elif [ "$secs" -lt 3600 ]; then
+        echo "$((secs / 60))m $((secs % 60))s"
+    else
+        echo "$((secs / 3600))h $((secs % 3600 / 60))m"
+    fi
+}
 
 is_ignored() {
     local n="$1" x
@@ -134,14 +151,22 @@ send_join_alert() {
 send_left_alert() {
     # Own cooldown map: sharing one with joins would swallow a leave that
     # follows a join within COOLDOWN, which is exactly when it matters.
-    local name="$1" kind="$2" ts="$3" now http
+    local name="$1" kind="$2" ts="$3" now http suffix=""
     now="$(date +%s)"
+
+    # Session length, when this process saw the join. Cleared before the
+    # cooldown check so a run of leave lines cannot leave stale state behind.
+    if [ -n "${joined_at[$name]:-}" ]; then
+        suffix=" after $(format_duration "$((now - joined_at[$name]))")"
+        unset 'joined_at[$name]'
+    fi
+
     if [ "${last_left[$name]:-0}" != 0 ]; then
         [ "$((now - last_left[$name]))" -lt "$COOLDOWN" ] && return 0
     fi
     last_left[$name]="$now"
 
-    http="$(pushover_send "Left: $name" 0 "$name ($kind) left the server at $ts UTC")"
+    http="$(pushover_send "Left: $name" 0 "$name ($kind) left the server at $ts UTC$suffix")"
     if [ "$VERBOSE" = 1 ] || [ "$http" != 200 ]; then
         echo "pushover[left:$name] http=$http" >&2
     fi
@@ -171,6 +196,9 @@ process_line() {
             fi
             valid_name "$name" || return 0
             is_ignored "$name" && return 0
+            # Recorded before the alert: the join may be coalesced, but the
+            # leave still needs a start time.
+            joined_at[$name]="$(date +%s)"
             send_join_alert "$name" "$ip ($kind)" "$ts"
             return 0
             ;;
