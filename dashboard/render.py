@@ -23,8 +23,11 @@ PAGE = """<!doctype html>
 </head>
 <body class="dash">
 <header>
-  <h1>{heading}</h1>
-  <p>{subtitle}</p>
+  <div>
+    <h1>{heading}</h1>
+    <p>{subtitle}</p>
+  </div>
+  {span_nav}
 </header>
 <main>
 {body}
@@ -460,7 +463,6 @@ def _status_banner(state, span):
         f"<h2>{esc(headline)}</h2>\n"
         f"<p>{esc(' · '.join(facts))}</p>\n"
         f"<p>{esc(summary)}</p>\n"
-        f"{_span_nav(span)}\n"
         f"</article>\n"
     )
 
@@ -497,6 +499,7 @@ def page(state, refresh=15, asset_v="0"):
         title="Minecraft — família",
         heading="Minecraft — família",
         subtitle=f"host.example.com · {esc(summary)} · updated {_clock(generated, with_date=True, seconds=True)} UTC",
+        span_nav=_span_nav(span),
         body=body,
     )
 

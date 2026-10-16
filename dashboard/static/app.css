@@ -37,6 +37,34 @@ body > header p {
   margin-bottom: 0;
 }
 
+/* ---- metrics page: title band with the timespan switch on the right -----
+ * The switch picks the chart window and says nothing about the server's
+ * state, so it sits in the title band, not in the status card. It wraps onto
+ * its own line when the band gets too narrow for both. */
+body.dash > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem 0.8rem;
+}
+body.dash > header > div {
+  min-width: 0;
+}
+body.dash > header nav {
+  flex: none;
+  margin-top: 0.3rem;
+}
+body.dash > header nav ul {
+  padding-left: 0;
+  margin-bottom: 0;
+  font-size: 0.8rem;
+}
+body.dash > header nav li {
+  margin-bottom: 0;
+  margin-left: 0.7rem;
+}
+
 body > footer {
   padding-block: 0.6rem 1rem;
   font-size: 0.78rem;
@@ -95,14 +123,6 @@ body.dash article[data-status] h2 {
 body.dash article[data-status] p {
   color: var(--pico-color);
   margin-bottom: 0.3rem;
-}
-body.dash article[data-status] nav ul {
-  padding-left: 0;
-  margin-bottom: 0;
-  font-size: 0.8rem;
-}
-body.dash article[data-status] nav li {
-  margin-right: 0.6rem;
 }
 
 /* ---- metrics page: multi-column flow ------------------------------------

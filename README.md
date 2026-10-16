@@ -347,6 +347,13 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-16 - Dashboard: timespan switch moved to the title band
+
+- The 24 h / 7 / 30 / 90 d switch sat inside the server-status card, where it
+  read as part of the uptime story. It now sits on the right of the title band
+  (`body.dash > header` became a wrapping flex row) and drops to its own line on
+  a phone. Same `?span=` links, no behaviour change.
+
 ### 2026-10-16 - Dashboard: up/down status, outage-aware charts, timespans
 
 - The page now answers "is the server up?" first: a full-width card with the

@@ -267,7 +267,9 @@ server-side.
 - **Spans are links, not client state.** `?span=` is re-queried server-side and
   survives the 15 s meta refresh; `/state.json?span=` gives scripts the same
   window. History is cached ~20 s per span, so a 90-day query does not run on
-  every page load.
+  every page load. The switch lives in the title band (`body.dash > header`,
+  a wrapping flex row), not in the status card: it selects the chart window and
+  says nothing about whether the server is up.
 - **`playtime` follows the span** so "Most played — last 7 days" is honest when
   the window is 24 h or 90 d.
 - **Not chosen:** vendoring a JS charting library (uPlot/Chart.js) for zoom and
