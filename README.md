@@ -347,6 +347,19 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-16 - Dashboard: the player chart now says "so far"
+
+- The chart plots the **peak per bucket**, so its newest point is the busiest
+  moment of the current 30-min bucket — not the live count. At 16:06 the panel
+  read "1 online" while the last point read 2, because two players had been on
+  until 16:06:10 (30 ticks: fourteen at 2, sixteen at 1 → peak 2, average 1.43).
+  Both numbers were right, and the peak is what preserves a short visit (an
+  average flattens it, "the last value" hides a 20-minute session entirely).
+- Made explicit rather than changing the data: the caption leads with the live
+  figure (`1 online now · line: peak 2, average 0.7 per 30 min`), and the
+  first/last bucket tooltips say `(so far)` / `(partial)` since those buckets
+  are only partly inside the window.
+
 ### 2026-10-16 - Dashboard: timespan switch moved to the title band
 
 - The 24 h / 7 / 30 / 90 d switch sat inside the server-status card, where it

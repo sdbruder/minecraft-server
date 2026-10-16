@@ -219,6 +219,14 @@ def time_chart(points, span, kind="line", width=640, height=180, unit="",
             f'fill="currentColor" fill-opacity="0.7">{time.strftime(fmt, time.gmtime(ts))}</text>'
         )
 
+    def edge_note(ts):
+        """The first and last bucket are only partly inside the window, so the
+        newest point is the peak *so far* — say so, or it reads as a live count
+        that contradicts the players panel."""
+        if ts + span["bucket"] > x1:
+            return " (so far)"
+        return " (partial)" if ts < x0 else ""
+
     if kind == "bars":
         slot = plot_w / max(1, len(points))
         width_bar = max(1.0, min(slot * 0.7, slot - 1))
@@ -229,7 +237,8 @@ def time_chart(points, span, kind="line", width=640, height=180, unit="",
             parts.append(
                 f'<rect x="{x:.1f}" y="{y:.1f}" width="{width_bar:.1f}" '
                 f'height="{max(0.5, base_y - y):.1f}" rx="1" fill="currentColor" '
-                f'fill-opacity="0.55"><title>{_clock(ts)}: {_fmt(value)}{esc(unit)}</title></rect>'
+                f'fill-opacity="0.55"><title>{_clock(ts)}{edge_note(ts)}: '
+                f'{_fmt(value)}{esc(unit)}</title></rect>'
             )
     else:
         segments, run = [], []
@@ -264,8 +273,8 @@ def time_chart(points, span, kind="line", width=640, height=180, unit="",
                 x, y = sx(ts), sy(value)
                 parts.append(
                     f'<circle cx="{x:.1f}" cy="{y:.1f}" r="7" fill="none" '
-                    f'pointer-events="all"><title>{_clock(ts, with_date=with_date)}: '
-                    f'{_fmt(value)}{esc(unit)}</title></circle>'
+                    f'pointer-events="all"><title>{_clock(ts, with_date=with_date)}'
+                    f'{edge_note(ts)}: {_fmt(value)}{esc(unit)}</title></circle>'
                     f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.2" fill="currentColor" '
                     f'pointer-events="none"/>'
                 )
@@ -297,15 +306,20 @@ def _bucket_label(span):
     }.get(span["bucket"], f"{span['bucket'] // 60} min")
 
 
-def _players_chart_panel(history, span):
-    points = [(ts, players) for ts, players, _tps, _down, _ticks in history.get("series") or []]
+def _players_chart_panel(players, history, span):
+    """The line is the peak per bucket, so its newest point is the busiest
+    moment of the bucket *so far* — never the live count. Lead the caption with
+    the live figure so the two cannot look like they disagree."""
+    points = [(ts, count) for ts, count, _tps, _down, _ticks in history.get("series") or []]
     values = [value for _, value in points if value is not None]
+    live = players.get("count")
+    now = f"{live} online now" if live is not None else "live count unknown"
     return _article(
         f"Players online — peak per {_bucket_label(span)}, {span['label']}",
         time_chart(points, span, unit=" online", integer=True,
                    bands=history.get("outages") or [])
-        + f"<p><small>{esc(_series_summary(values))} · gaps: no samples · "
-          f"red bands: server down</small></p>",
+        + f"<p><small>{esc(now)} · line: {esc(_series_summary(values))} per "
+          f"{_bucket_label(span)} · gaps: no samples · red bands: server down</small></p>",
     )
 
 
@@ -481,7 +495,7 @@ def page(state, refresh=15, asset_v="0"):
     body = "".join([
         _status_banner(state, span),
         _players_panel(players),
-        _players_chart_panel(history, span),
+        _players_chart_panel(players, history, span),
         _tps_panel(history, span),
         _playtime_panel(history, span),
         _sessions_panel(history),
