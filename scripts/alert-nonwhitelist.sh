@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# alert-nonwhitelist.sh - push a Pushover alert when a player joins the
-# Minecraft server, and when a non-whitelisted player tries to join.
+# alert-nonwhitelist.sh - push a Pushover alert when a player joins or leaves
+# the Minecraft server, and when a non-whitelisted player tries to join.
 #
 # It follows the server log. For a successful join it matches the entity line,
 # which carries name and IP for both Java and Bedrock players:
@@ -11,6 +11,18 @@
 #
 # Floodgate prefixes Bedrock usernames with "." (username-prefix), so a leading
 # dot marks the player as Bedrock and is stripped from the alert.
+#
+# For a leave it matches Paper's "left the game" line, which carries the
+# (Floodgate-prefixed) name and comes in two shapes because a chat plugin
+# sometimes rewrites system messages:
+#
+#   [Server thread/INFO]: Steve left the game
+#   [Server thread/INFO]: System chat: Steve left the game
+#
+# The other candidate, "NAME lost connection: Disconnected", is deliberately
+# NOT used: scanners that never join (FishNet and friends) emit it too, and a
+# real quit usually logs both lines, so it would mean alerts for bots and
+# duplicates for players.
 #
 # For a rejected join it matches the whitelist rejection lines Paper and Geyser
 # write. Java players get name + IP on one line:
@@ -36,7 +48,9 @@
 #   PUSHOVER_TOKEN Pushover app API token (required; from pushover.net/apps)
 #   PUSHOVER_USER  Pushover user/group key (required)
 #   PUSHOVER_URL   Pushover API endpoint  (default: https://api.pushover.net/1/messages.json)
-#   COOLDOWN       per-name seconds       (default: 300)
+#   COOLDOWN       per-name seconds, tracked separately for joins and for
+#                  leaves so a leave is never hidden by the preceding join
+#                                          (default: 300)
 #   IGNORE         space-separated names  (default: FishNet)
 #   EVENTS         blocked-join log       (default: ~/minecraft/logs/blocked-joins.log)
 #   VERBOSE        1 to print API reply   (default: 0)
@@ -59,6 +73,7 @@ fi
 
 declare -A last_seen=()
 declare -A last_join=()
+declare -A last_left=()
 last_bedrock_ip=""
 last_bedrock_ts=0
 
@@ -116,6 +131,22 @@ send_join_alert() {
     fi
 }
 
+send_left_alert() {
+    # Own cooldown map: sharing one with joins would swallow a leave that
+    # follows a join within COOLDOWN, which is exactly when it matters.
+    local name="$1" kind="$2" ts="$3" now http
+    now="$(date +%s)"
+    if [ "${last_left[$name]:-0}" != 0 ]; then
+        [ "$((now - last_left[$name]))" -lt "$COOLDOWN" ] && return 0
+    fi
+    last_left[$name]="$now"
+
+    http="$(pushover_send "Left: $name" 0 "$name ($kind) left the server at $ts UTC")"
+    if [ "$VERBOSE" = 1 ] || [ "$http" != 200 ]; then
+        echo "pushover[left:$name] http=$http" >&2
+    fi
+}
+
 process_line() {
     local line="$1" rest name ip ts now kind
     ts="${line#\[}"; ts="${ts%%\]*}"
@@ -144,6 +175,30 @@ process_line() {
             return 0
             ;;
     esac
+
+    # Left the game. "System chat: " is checked first: the plain pattern below
+    # would otherwise capture the literal "System chat: name" as the name.
+    #   [Server thread/INFO]: Steve left the game
+    #   [Server thread/INFO]: System chat: Steve left the game
+    case "$line" in
+        *"System chat: "*" left the game"*)
+            name="${line#*System chat: }" ;;
+        *"]: "*" left the game"*)
+            name="${line#*]: }" ;;
+        *)
+            name="" ;;
+    esac
+    if [ -n "$name" ]; then
+        name="${name%% left the game*}"
+        kind="java"
+        if [[ "$name" == .* ]]; then
+            name="${name#.}"; kind="bedrock"   # Floodgate username-prefix
+        fi
+        valid_name "$name" || return 0
+        is_ignored "$name" && return 0
+        send_left_alert "$name" "$kind" "$ts"
+        return 0
+    fi
 
     # Any whitelist rejection line that starts with "Disconnecting ".
     case "$line" in

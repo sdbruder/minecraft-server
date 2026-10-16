@@ -123,8 +123,8 @@ Notes:
 
 A systemd service on the server (`mc-alerts.service`) follows
 `logs/latest.log` and pushes **Pushover** notifications to your phone for every
-join: a successful one (`Joined: <name>`) and a rejected, non-whitelisted one
-(`Blocked join: <name>`).
+join and leave: `Joined: <name>`, `Left: <name>`, and a rejected,
+non-whitelisted attempt (`Blocked join: <name>`).
 
 A successful join is taken from the entity line, which carries name and IP and
 is written once per join for **Java and Bedrock** players alike:
@@ -138,6 +138,18 @@ unreliable: `Steve joined the game` is sometimes rewritten to
 `System chat: Steve joined the game` by a chat plugin (and has no IP), and
 `[User Authenticator #N/INFO]: UUID of player Steve is ...` also fires for
 auth attempts that the whitelist then rejects.
+
+A **leave** comes from Paper's `left the game` line, in either shape:
+
+```
+[Server thread/INFO]: Steve left the game
+[Server thread/INFO]: System chat: Steve left the game     # chat-plugin rewrite
+```
+
+`NAME lost connection: Disconnected` is deliberately *not* used: scanners that
+never joined (FishNet and friends — 113 such lines in the current logs) emit it
+too, and a real quit usually logs both lines, so it would alert on bots and
+double-alert on players.
 
 A rejected join comes from the whitelist rejection line Paper writes:
 
@@ -185,8 +197,9 @@ and is delayed).
 - Credentials live in `~/minecraft/mc-alerts.env` (read by the unit via
   `EnvironmentFile`), never in this repo. The backup's `INCLUDES` list is
   explicit, so this file is not captured by `scripts/backup.sh`.
-- Blocked joins send at priority *high* (1), joins at normal (0).
-- Same name within 300 s is coalesced into one alert.
+- Blocked joins send at priority *high* (1); joins and leaves at normal (0).
+- Repeated events for the same name within 300 s are coalesced — separately for
+  joins and for leaves, so a leave right after a join still alerts.
 - Every blocked attempt is also appended to `~/minecraft/logs/blocked-joins.log`.
 - Manage it: `sudo systemctl status|stop|restart mc-alerts`.
 
@@ -258,6 +271,21 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 (connected players, rejected joins, versions, plugins) on a non-80 port.
 
 ## Changelog
+
+### 2026-10-16 - Alerts: also notify on leaves
+
+- `scripts/alert-nonwhitelist.sh` now sends `Left: <name>` next to `Joined:`
+  and `Blocked join:`. The trigger is Paper's `left the game` line, in both
+  shapes (plain and the `System chat:` chat-plugin rewrite).
+- `NAME lost connection: Disconnected` is deliberately ignored: scanners that
+  never joined (FishNet) emit it too, and a real quit usually logs both lines.
+  Evidence from the live logs: 122 `left the game` lines vs 575 `lost
+  connection` lines, of which 113 are FishNet.
+- Joins and leaves keep separate per-name cooldowns, so a leave right after a
+  join is never swallowed by the join.
+- Verified by a 98-line matrix (9/9 checks) and by replaying all 59,784 lines of
+  the server's logs: 124 join alerts = 124 entity lines, 122 leave alerts = 122
+  `left the game` lines, 8 blocked alerts = 8 rejection lines.
 
 ### 2026-10-15 - Disk cleanup and leaner AutoPlug backups
 
