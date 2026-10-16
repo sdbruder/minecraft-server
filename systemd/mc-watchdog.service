@@ -1,0 +1,25 @@
+[Unit]
+Description=Watch the Minecraft server and alert on a down/up transition (Pushover)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=steve
+Environment=HOME=/home/steve
+# PUSHOVER_TOKEN / PUSHOVER_USER (mode 600); optional so the unit still
+# starts if the file is missing. Path must be absolute (~ is not expanded).
+EnvironmentFile=-/home/steve/minecraft/mc-alerts.env
+ExecStart=/home/steve/minecraft/scripts/watch-server.sh
+
+# One probe per run: reads server.properties, runs `systemctl is-active`
+# (AF_UNIX to the D-Bus socket), opens a TCP connection to the RCON port and
+# calls the Pushover API. It writes only its state file under ~/minecraft, so
+# ProtectHome must stay off. The script exits 0 also when the server is down,
+# so a failed run of this unit means the script itself broke.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

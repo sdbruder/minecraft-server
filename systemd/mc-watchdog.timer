@@ -1,0 +1,15 @@
+[Unit]
+Description=Probe the Minecraft server every minute
+
+[Timer]
+# A watchdog must notice an outage fast, so it runs on every minute and keeps
+# the jitter small: AccuracySec=10s (instead of systemd's 1 min default, which
+# would smear the probe over the whole next minute). No RandomizedDelaySec -
+# unlike the backup timer, this one wants a predictable schedule.
+# Persistent=true is deliberately NOT set: catching up a missed run after a
+# reboot would only produce a stale alert for an outage that is long over.
+OnCalendar=*:0/1
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
