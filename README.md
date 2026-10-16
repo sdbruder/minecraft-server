@@ -101,6 +101,7 @@ repo (installed to `/etc/systemd/system/`).
 |---|---|
 | `autoplug.service` | Runs AutoPlug, the Minecraft server wrapper. Replaces the old `screen` wrapper. |
 | `mc-alerts.service` | The Pushover join alerts (successful and rejected). |
+| `mc-watchdog.timer` | Probes the server once a minute; alerts when it goes down, and again when it comes back. |
 | `mc-dashboard.service` | The read-only web dashboard (behind nginx at `mc.example.com`). |
 | `mc-backup-prune.timer` | Daily prune of old backup archives on the Storage Box. |
 
@@ -211,16 +212,53 @@ and is delayed).
 - Every blocked attempt is also appended to `~/minecraft/logs/blocked-joins.log`.
 - Manage it: `sudo systemctl status|stop|restart mc-alerts`.
 
+### Server down / back up
+
+`mc-watchdog.timer` runs `scripts/watch-server.sh` once a minute. A probe counts
+as **up** only when both parts pass: `systemctl is-active autoplug` **and** a TCP
+connect to the RCON port (read from `server.properties`), so a crash, a failed
+start and a hung-but-listening server are all caught.
+
+- Three consecutive failures are required before `Server down` (priority 1), so
+  the daily 05:00 restart and AutoPlug self-updates (30-60 s) stay silent.
+- Alerts fire on **transitions only**: one `Server down`, then one `Server up`
+  with the outage length — `Minecraft server is up at 15:47:43 UTC after 1h 12m
+  (down since 14:35:43 UTC)`.
+- The message names what failed: `unit autoplug not active`, `RCON port 25575
+  unreachable`, or both.
+- State lives in `~/minecraft/server-watch.state`. The script always exits 0,
+  also while the server is down, so a *failed* run of the unit means the script
+  itself broke. Credentials come from the same `mc-alerts.env`.
+- Verified with a synthetic matrix: 3 failures → exactly one alert; more
+  failures → silence; recovery → one alert with the duration; a 500 from
+  Pushover, or missing credentials → a warning on stderr and exit 0.
+
+```sh
+systemctl list-timers mc-watchdog.timer
+sudo systemctl start mc-watchdog.service    # one probe now
+journalctl -u mc-watchdog -n 20
+```
+
 ## Dashboard
 
 Read-only metrics at **<https://mc.example.com>**. Sign in with the usual
 username/password **form** (`/login`), so a password manager can save it — no
 browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
 
-- players online (Java and Bedrock) plus a 24 h chart;
-- play sessions, playtime and recent joins/leaves;
-- rejected (non-whitelisted) joins: recent list, per-day chart, most frequent;
+- **is the server up?** — a full-width status card first: up / starting / not
+  responding / down, with the `autoplug` unit state, the Paper pid, the uptime,
+  the player count and the share of the window that was up;
+- players online (Java and Bedrock) and charts of peak players and TPS;
+- charts follow a timespan — **24 h / 7 / 30 / 90 days** (`?span=…` links, kept
+  across the 15 s refresh); outages are drawn as red bands, and a gap means "no
+  samples" (the dashboard was not running);
+- play sessions, playtime and recent joins/leaves (all following the span);
+- rejected (non-whitelisted) joins: recent list, per-bucket chart, most frequent;
 - TPS/MSPT, server uptime, MOTD, world + size, versions, plugins.
+
+Availability is *measured*, not guessed: the 30 s sampler writes a row on every
+tick and marks `up = 0` when RCON does not answer. That flag only exists from
+2026-10-16 onwards — older outages show as gaps rather than bands.
 
 `GET /state.json` returns the same data as JSON; `GET /healthz` is the check
 endpoint (no auth). Nothing is written to the game — the only RCON commands used
@@ -308,6 +346,57 @@ off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
 See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-16 - Dashboard: up/down status, outage-aware charts, timespans
+
+- The page now answers "is the server up?" first: a full-width card with the
+  state (up / starting / not responding / down), the `autoplug` unit state, the
+  Paper pid, the uptime, players, and how much of the selected window was up.
+  A working RCON is the only proof of *up*; the unit state, the pid and the
+  process age explain why not. Tones come from `data-status` in the CSS.
+- The 30 s sampler now writes a row on **every** tick, `up = 0` when RCON does
+  not answer (it used to skip the tick). Outages are therefore in the history:
+  they draw as red bands on the charts and count against the availability
+  figure. `samples.up` was added by a migration (`DEFAULT 1` — correct for the
+  rows written before it, which only existed while up). Outages predating the
+  column show as gaps, not bands.
+- The bar-per-index charts were replaced by one time-axis engine: points are
+  placed by timestamp, so a missing bucket is a gap and never a fake zero;
+  y gridlines use 1/2/5×10ⁿ steps (the TPS chart no longer labels 18.69); four
+  x labels adapt to the window; hovering reads values through SVG `<title>`.
+  Still no JavaScript, no CDN, no build step.
+- Every chart follows a timespan: **24 h / 7 / 30 / 90 days** via `?span=`
+  links (kept by the meta refresh), with buckets from 30 min to 1 day
+  (48-168 points) and a ~20 s per-span cache. `/state.json?span=30d` exposes the
+  same window to scripts. Added a **TPS chart** (sampled since day one, never
+  plotted) and "Most played" now follows the span instead of being fixed at 7 d.
+- `scripts/watch-server.sh` + `mc-watchdog.timer`: a once-a-minute probe that
+  pushes `Server down` (priority 1) after three consecutive failures, and
+  `Server up` with the outage length on recovery. See "Alerts".
+- Verified in a browser against a copy of the live database: up and down states,
+  both outage bands, all four spans and the axis/tooltip output; then deployed
+  and re-checked on the server (`/healthz`, the migrated column, a fresh sample,
+  all four spans rendering from the real history).
+
+### 2026-10-16 - Plugin update staged (ViaVersion 5.12.1, Geyser build 1254)
+
+- Downloaded and checksum-verified, staged in `/tmp/plugstage` on the server:
+  Geyser-Spigot 2.11.3 build **1254** (sha256 matches the GeyserMC API) and
+  ViaVersion **5.12.1** (sha512 matches Modrinth), replacing build 1251 and
+  5.12.0. Both are drop-in swaps; the old jars are kept as
+  `plugins/Geyser-Spigot.jar.pre-1251.bak` and
+  `plugins/ViaVersion-LATEST-[5.11.0].jar.pre-5.12.0.bak`.
+- The swap waits for an **empty server**. The first attempt (15:42, server had
+  just emptied) rolled both jars back on a false failure: its "is it up?" check
+  read the *previous* session's log — Paper rotates `latest.log` ~19 s into a
+  boot, so `grep 'Done ('` matched the old boot — and the plugin check then ran
+  3 s into the fresh session, before Geyser had logged its version. The server
+  itself was never broken; it cost two extra restarts and left `plugins/` on
+  1251 / 5.12.0.
+- The replacement watcher waits for a **new log session** *and* a working RCON
+  before judging anything, then requires the Geyser and ViaVersion lines in the
+  fresh log, and rolls back only on a real failure.
+- Status: **not yet applied** — two players were online all evening.
 
 ### 2026-10-16 - Server outage: AutoPlug's java-updater vs the installed JRE
 

@@ -5,9 +5,11 @@ client-side JavaScript. Charts are inline SVG drawn here.
 """
 
 import html
+import math
 import time
 
-from collect import human_size
+from collect import human_duration, human_size
+from store import DEFAULT_SPAN, SPANS, span_spec
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -99,51 +101,172 @@ def _clock(epoch, with_date=False, seconds=False):
     return time.strftime(fmt, time.gmtime(epoch))
 
 
-def bar_chart(points, width=880, height=150, pad_left=42, pad_bottom=22, pad_top=12, unit=""):
-    """points: [(label, value)] -> inline SVG bars (scales with the page)."""
+def _nice_ceiling(value):
+    """Smallest 1/2/5×10ⁿ that is >= value, so y-axis labels read cleanly."""
+    if value <= 0:
+        return 1.0
+    base = 10 ** math.floor(math.log10(value))
+    for factor in (1, 2, 5, 10):
+        if value <= factor * base * 1.0001:
+            return factor * base
+    return 10 * base
+
+
+def _fmt(value):
+    if value is None:
+        return "—"
+    return f"{round(value):g}" if abs(value - round(value)) < 0.05 else f"{value:.1f}"
+
+
+def _x_format(hours):
+    if hours <= 48:
+        return "%H:%M"
+    if hours <= 24 * 10:
+        return "%a %H:%M"
+    return "%m-%d"
+
+
+def _series_summary(values):
+    if not values:
+        return "no samples in this window"
+    return f"peak {_fmt(max(values))}, average {_fmt(sum(values) / len(values))}"
+
+
+def time_chart(points, span, kind="line", width=640, height=180, unit="",
+               bands=(), y_min=0, integer=False):
+    """Inline SVG chart on a real time axis, drawn entirely on the server.
+
+    points: [(ts, value or None)] oldest first. None means "no samples in that
+        bucket" and is drawn as a gap, never as zero.
+    bands:  [(start, end)] windows (outages) drawn behind the series.
+    y_min:  0 anchors the axis at zero; None follows the data (TPS hovers near
+        the top of its range, where a zero baseline wastes the plot).
+
+    No JavaScript: values are readable by hovering, through SVG <title>.
+    """
     if not points:
-        return "<p><em>no data yet</em></p>\n"
-    values = [max(0, int(v or 0)) for _, v in points]
-    vmax = max(values) or 1
-    count = len(points)
-    plot_w = width - pad_left - 8
+        return "<p><em>no data for this window yet</em></p>\n"
+
+    x1 = int(time.time())
+    x0 = x1 - span["hours"] * 3600
+    pad_left, pad_right, pad_top, pad_bottom = 34, 6, 10, 20
+    plot_w = width - pad_left - pad_right
     plot_h = height - pad_top - pad_bottom
-    slot = plot_w / count
-    gap = min(2.0, slot * 0.2)
+
+    values = [value for _, value in points if value is not None]
+    if not values:
+        return "<p><em>the server was down for this whole window</em></p>\n"
+    top = max(values)
+    if y_min is None:                       # follow the data (TPS sits near 20)
+        step = _nice_ceiling(max(top - min(values), 0.5) / 2)
+        lo = math.floor(min(values) / step) * step
+    else:
+        lo = float(y_min)
+        step = _nice_ceiling(max(top - lo, 1.0) / 2)
+    if integer:                             # players and reject counts
+        step = max(1.0, step)
+    hi = lo + 2 * step
+    while hi < top:
+        hi += step
+    spread = hi - lo
+
+    def sx(ts):
+        return pad_left + (min(max(ts, x0), x1) - x0) / (x1 - x0) * plot_w
+
+    def sy(value):
+        return pad_top + plot_h - (value - lo) / spread * plot_h
+
+    fmt = _x_format(span["hours"])
+    base_y = sy(lo)
     parts = [
         f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" '
-        f'aria-label="bar chart" xmlns="http://www.w3.org/2000/svg">'
+        f'aria-label="time series chart" xmlns="http://www.w3.org/2000/svg">'
     ]
-    parts.append(
-        f'<line x1="{pad_left}" y1="{pad_top + plot_h}" x2="{width - 8}" '
-        f'y2="{pad_top + plot_h}" stroke="currentColor" stroke-opacity="0.35"/>'
-    )
-    for index, (label, value) in enumerate(points):
-        value = max(0, int(value or 0))
-        bar_h = (value / vmax) * plot_h
-        x = pad_left + index * slot + gap / 2
-        y = pad_top + plot_h - bar_h
+
+    # Outages first: everything else is drawn on top of them.
+    for start, end in bands:
+        left, right = sx(start), sx(end + span["bucket"])
         parts.append(
-            f'<rect x="{x:.1f}" y="{y:.1f}" width="{max(1.0, slot - gap):.1f}" '
-            f'height="{max(0.0, bar_h):.1f}" rx="2" fill="currentColor" '
-            f'fill-opacity="0.55"><title>{esc(label)}: {value}{esc(unit)}</title></rect>'
+            f'<rect x="{left:.1f}" y="{pad_top}" width="{max(1.0, right - left):.1f}" '
+            f'height="{plot_h}" fill="var(--mc-down)" fill-opacity="0.18">'
+            f'<title>server down {_clock(start)}–{_clock(end)}</title></rect>'
+        )
+
+    for value in (lo, lo + step, hi):
+        y = sy(value)
+        parts.append(
+            f'<line x1="{pad_left}" y1="{y:.1f}" x2="{width - pad_right}" y2="{y:.1f}" '
+            f'stroke="currentColor" stroke-opacity="0.13"/>'
+        )
+        parts.append(
+            f'<text x="{pad_left - 6}" y="{y + 3.5:.1f}" text-anchor="end" font-size="10" '
+            f'fill="currentColor" fill-opacity="0.7">{value:g}</text>'
         )
     parts.append(
-        f'<text x="{pad_left - 6}" y="{pad_top + 9}" text-anchor="end" font-size="11" '
-        f'fill="currentColor" fill-opacity="0.7">{vmax:g}</text>'
+        f'<line x1="{pad_left}" y1="{base_y:.1f}" x2="{width - pad_right}" y2="{base_y:.1f}" '
+        f'stroke="currentColor" stroke-opacity="0.35"/>'
     )
-    parts.append(
-        f'<text x="{pad_left - 6}" y="{pad_top + plot_h}" text-anchor="end" '
-        f'font-size="11" fill="currentColor" fill-opacity="0.7">0</text>'
-    )
-    parts.append(
-        f'<text x="{pad_left}" y="{height - 6}" font-size="11" fill="currentColor" '
-        f'fill-opacity="0.7">{esc(points[0][0])}</text>'
-    )
-    parts.append(
-        f'<text x="{width - 8}" y="{height - 6}" text-anchor="end" font-size="11" '
-        f'fill="currentColor" fill-opacity="0.7">{esc(points[-1][0])}</text>'
-    )
+
+    ticks = 4
+    for index in range(ticks):
+        ts = x0 + (x1 - x0) * index / (ticks - 1)
+        anchor = "start" if index == 0 else "end" if index == ticks - 1 else "middle"
+        parts.append(
+            f'<text x="{sx(ts):.1f}" y="{height - 6}" text-anchor="{anchor}" font-size="10" '
+            f'fill="currentColor" fill-opacity="0.7">{time.strftime(fmt, time.gmtime(ts))}</text>'
+        )
+
+    if kind == "bars":
+        slot = plot_w / max(1, len(points))
+        width_bar = max(1.0, min(slot * 0.7, slot - 1))
+        for ts, value in points:
+            if value is None:
+                continue
+            x, y = sx(ts) + (slot - width_bar) / 2, sy(value)
+            parts.append(
+                f'<rect x="{x:.1f}" y="{y:.1f}" width="{width_bar:.1f}" '
+                f'height="{max(0.5, base_y - y):.1f}" rx="1" fill="currentColor" '
+                f'fill-opacity="0.55"><title>{_clock(ts)}: {_fmt(value)}{esc(unit)}</title></rect>'
+            )
+    else:
+        segments, run = [], []
+        for ts, value in points:
+            if value is None:
+                if run:
+                    segments.append(run)
+                    run = []
+            else:
+                run.append((sx(ts), sy(value), ts, value))
+        if run:
+            segments.append(run)
+        for segment in segments:
+            if len(segment) == 1:
+                x, y, _, _ = segment[0]
+                parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.4" fill="currentColor"/>')
+                continue
+            line = " ".join(f"{x:.1f},{y:.1f}" for x, y, _, _ in segment)
+            parts.append(
+                f'<polygon points="{segment[0][0]:.1f},{base_y:.1f} {line} '
+                f'{segment[-1][0]:.1f},{base_y:.1f}" fill="currentColor" fill-opacity="0.15"/>'
+            )
+            parts.append(
+                f'<polyline points="{line}" fill="none" stroke="currentColor" '
+                f'stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
+            )
+        if len(points) <= 100:   # wider hit targets; not worth the bytes past that
+            with_date = span["hours"] > 48
+            for ts, value in points:
+                if value is None:
+                    continue
+                x, y = sx(ts), sy(value)
+                parts.append(
+                    f'<circle cx="{x:.1f}" cy="{y:.1f}" r="7" fill="none" '
+                    f'pointer-events="all"><title>{_clock(ts, with_date=with_date)}: '
+                    f'{_fmt(value)}{esc(unit)}</title></circle>'
+                    f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.2" fill="currentColor" '
+                    f'pointer-events="none"/>'
+                )
+
     parts.append("</svg>\n")
     return "".join(parts)
 
@@ -165,18 +288,42 @@ def _players_panel(players):
     return _article(heading, body)
 
 
-def _history_panel(history):
-    points = [(_clock(ts), n) for ts, n in history.get("series") or []]
-    return _article("Players online — last 24 h",
-                    bar_chart(points, width=640, height=170, unit=" online"))
+def _bucket_label(span):
+    return {
+        1800: "30 min", 3600: "hour", 21600: "6 h", 86400: "day",
+    }.get(span["bucket"], f"{span['bucket'] // 60} min")
 
 
-def _playtime_panel(history):
+def _players_chart_panel(history, span):
+    points = [(ts, players) for ts, players, _tps, _down, _ticks in history.get("series") or []]
+    values = [value for _, value in points if value is not None]
+    return _article(
+        f"Players online — peak per {_bucket_label(span)}, {span['label']}",
+        time_chart(points, span, unit=" online", integer=True,
+                   bands=history.get("outages") or [])
+        + f"<p><small>{esc(_series_summary(values))} · gaps: no samples · "
+          f"red bands: server down</small></p>",
+    )
+
+
+def _tps_panel(history, span):
+    points = [(ts, tps) for ts, _players, tps, _down, _ticks in history.get("series") or []]
+    values = [value for _, value in points if value is not None]
+    if not values:
+        return ""
+    return _article(
+        f"TPS — average per {_bucket_label(span)}, {span['label']}",
+        time_chart(points, span, y_min=None, unit=" TPS", bands=history.get("outages") or [])
+        + f"<p><small>{esc(_series_summary(values))} · 20 is a healthy server</small></p>",
+    )
+
+
+def _playtime_panel(history, span):
     rows = [
         (player, f"{seconds // 3600}h {seconds % 3600 // 60:02d}m")
         for player, seconds in (history.get("playtime") or [])
     ]
-    return _article("Most played — last 7 days", _table(["player", "played"], rows))
+    return _article(f"Most played — {span['label']}", _table(["player", "played"], rows))
 
 
 def _sessions_panel(history):
@@ -195,9 +342,16 @@ def _rejects_recent_panel(history):
     return _article("Rejected joins — most recent", _table(["when (UTC)", "name", "ip"], rows))
 
 
-def _rejects_daily_panel(history):
-    points = [(day[5:], n) for day, n in (history.get("per_day") or [])]
-    return _article("Rejected joins — per day (30 d)", bar_chart(points, width=640, height=170, unit=" rejected"))
+def _rejects_chart_panel(history, span):
+    points = [(ts, n) for ts, n in (history.get("rejects") or [])]
+    total = sum(n for _, n in points)
+    plural = "" if total == 1 else "s"
+    return _article(
+        f"Rejected joins — per {_bucket_label(span)}, {span['label']}",
+        time_chart(points, span, kind="bars", width=440, height=150, unit=" rejected",
+                   integer=True)
+        + f"<p><small>{total} attempt{plural} in this window</small></p>",
+    )
 
 
 def _rejects_top_panel(history):
@@ -246,8 +400,74 @@ def _errors_panel(errors):
     return _article("Problems", f"<ul>{items}</ul>")
 
 
+# ------------------------------------------------------------ status bar ----
+
+STATUS_HEADLINE = {
+    "up": ("Server is up", "up"),
+    "starting": ("Server is starting", "warn"),
+    "unresponsive": ("Server is not responding", "warn"),
+    "down": ("Server is down", "down"),
+}
+STATUS_HELP = {
+    "starting": "no RCON answer yet — a cold start takes 25-35 s",
+    "unresponsive": "the autoplug unit is running but RCON stays silent",
+    "down": "the autoplug unit is not active",
+}
+
+
+def _span_nav(span):
+    """Timespan switch: plain links, so the page stays JavaScript-free."""
+    items = []
+    for key in SPANS:
+        if key == span["key"]:
+            items.append(f"<li><strong>{esc(key)}</strong></li>")
+        else:
+            items.append(f'<li><a href="/?span={esc(key)}">{esc(key)}</a></li>')
+    return f"<nav><ul>{''.join(items)}</ul></nav>\n"
+
+
+def _status_banner(state, span):
+    """The first thing on the page: is the server up, and has it been?"""
+    status = state.get("status") or {}
+    players = state.get("players") or {}
+    availability = (state.get("history") or {}).get("availability") or {}
+    name = status.get("state") or "unknown"
+    headline, tone = STATUS_HEADLINE.get(name, ("Server state unknown", "warn"))
+
+    facts = ["RCON answering" if status.get("rcon") else "RCON unreachable"]
+    if status.get("unit"):
+        facts.append(f"autoplug.service {status['unit']}")
+    if status.get("pid"):
+        facts.append(f"paper pid {status['pid']}")
+    if status.get("uptime") is not None:
+        facts.append(f"started {human_duration(status['uptime'])} ago")
+    if players.get("count") is not None:
+        facts.append(f"{players['count']} of {players.get('max') or '?'} players online")
+    if STATUS_HELP.get(name):
+        facts.append(STATUS_HELP[name])
+
+    if availability.get("ticks"):
+        summary = (f"{availability['up_pct']:.2f}% up over the {span['label']} — "
+                   f"{availability['down_ticks']} of {availability['ticks']} samples down")
+    else:
+        summary = f"nothing sampled for the {span['label']} yet"
+    if availability.get("outage_start"):
+        summary += (" · this outage started "
+                    f"{_clock(availability['outage_start'], with_date=True, seconds=True)} UTC")
+
+    return (
+        f'<article data-status="{tone}">\n'
+        f"<h2>{esc(headline)}</h2>\n"
+        f"<p>{esc(' · '.join(facts))}</p>\n"
+        f"<p>{esc(summary)}</p>\n"
+        f"{_span_nav(span)}\n"
+        f"</article>\n"
+    )
+
+
 def page(state, refresh=15, asset_v="0"):
     generated = state.get("generated") or time.time()
+    span = state.get("span") or span_spec(DEFAULT_SPAN)
     players = state.get("players") or {}
     count, maximum = players.get("count"), players.get("max")
     if count is None:
@@ -257,12 +477,14 @@ def page(state, refresh=15, asset_v="0"):
     history = state.get("history") or {}
 
     body = "".join([
+        _status_banner(state, span),
         _players_panel(players),
-        _history_panel(history),
-        _playtime_panel(history),
+        _players_chart_panel(history, span),
+        _tps_panel(history, span),
+        _playtime_panel(history, span),
         _sessions_panel(history),
         _rejects_recent_panel(history),
-        _rejects_daily_panel(history),
+        _rejects_chart_panel(history, span),
         _rejects_top_panel(history),
         _perf_panel(state.get("perf") or {}),
         _server_panel(state),

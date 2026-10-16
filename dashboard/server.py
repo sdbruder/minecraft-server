@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import collect            # noqa: E402
 import render             # noqa: E402
-from store import Store   # noqa: E402
+from store import DEFAULT_SPAN, Store, span_spec   # noqa: E402
 
 # ----------------------------------------------------------------- config ---
 
@@ -45,6 +45,8 @@ PLUGINS_DIR = MC_DIR / "plugins"
 
 LIVE_TTL = 5.0          # seconds a live snapshot is reused
 WORLD_TTL = 600.0       # seconds the world size is reused (walking is slow)
+HISTORY_TTL = 20.0      # seconds a span's history is reused (a 90 d query)
+STARTING_GRACE = 180.0  # seconds a silent-but-started server is "starting"
 STATIC_OK = {"pico.classless.min.css", "app.css"}
 
 # Stylesheets are served with a long max-age, so the URL carries a content
@@ -69,6 +71,10 @@ _live_lock = threading.Lock()
 _live_cache = {"t": 0.0, "v": None}
 _world_lock = threading.Lock()
 _world_cache = {"t": 0.0, "v": None}
+_unit_cache = {"t": 0.0, "v": None}
+_pid_cache = {"t": 0.0, "v": None}
+_history_lock = threading.Lock()
+_history_cache = {}     # span key -> (cached at, history dict)
 _failures = {}          # client ip -> (failure count, window start)
 
 
@@ -103,6 +109,46 @@ def world_size():
     return size
 
 
+def _cached(cache, ttl, func):
+    if time.time() - cache["t"] < ttl:
+        return cache["v"]
+    value = func()
+    cache.update(t=time.time(), v=value)
+    return value
+
+
+def unit_state():
+    """`systemctl is-active` forks a process; one page refresh every 15 s should
+    not run it that often."""
+    return _cached(_unit_cache, 60, lambda: collect.unit_state("autoplug.service"))
+
+
+def server_pid():
+    return _cached(_pid_cache, 30, collect.server_pid)
+
+
+def server_status(rcon_ok, uptime):
+    """Is the server up? RCON answering is the only proof the *game* is up; the
+    unit state and the Paper process explain why it is not.
+
+    up           — RCON answered
+    starting     — unit active, but no answer yet (boot takes ~25-35 s)
+    unresponsive — unit active and past the grace period, RCON silent
+    down         — the autoplug unit is not active
+    """
+    unit = unit_state()
+    if rcon_ok:
+        state = "up"
+    elif unit != "active":
+        state = "down"
+    elif uptime is None or uptime < STARTING_GRACE:
+        state = "starting"
+    else:
+        state = "unresponsive"
+    return {"state": state, "rcon": rcon_ok, "unit": unit, "uptime": uptime,
+            "pid": server_pid()}
+
+
 def gather_live():
     errors = []
     players = {"count": None, "max": None, "names": [], "error": None}
@@ -116,8 +162,8 @@ def gather_live():
         players["error"] = str(exc)
         errors.append(f"players: {exc}")
         last = store.latest_sample()
-        if last:                                   # show the last known count
-            players["count"] = last["players"]
+        if last and last["up"]:                    # last known count while up;
+            players["count"] = last["players"]     # a down tick's 0 would lie
 
     perf = {"tps": None, "mspt": None, "uptime": server_uptime()}
     for key, command, parser in (
@@ -140,6 +186,7 @@ def gather_live():
     return {
         "players": players,
         "perf": perf,
+        "status": server_status(players["error"] is None, perf["uptime"]),
         "versions": collect.parse_versions(collect.read_log_head(LATEST_LOG)),
         "plugins": collect.read_plugins(PLUGINS_DIR),
         "world_size": world_size(),
@@ -157,17 +204,35 @@ def live_state():
         return value
 
 
-def full_state():
-    state = dict(live_state())
-    state["generated"] = time.time()
-    state["history"] = {
-        "series": store.players_series(hours=24, bucket=1800),
-        "per_day": store.rejects_per_day(days=30),
+def history(span):
+    """History for one span, cached briefly: the page reloads every REFRESH
+    seconds and a 90-day query does not need to run that often."""
+    key = span["key"]
+    with _history_lock:
+        cached = _history_cache.get(key)
+        if cached and time.time() - cached[0] < HISTORY_TTL:
+            return cached[1]
+    value = {
+        "series": store.samples_series(span["hours"], span["bucket"]),
+        "outages": store.down_intervals(span["hours"]),
+        "availability": store.availability(span["hours"]),
+        "rejects": store.rejects_series(span["hours"], span["bucket"]),
         "top": store.top_rejected(10),
         "recent_rejects": store.recent_rejects(20),
         "sessions": store.recent_sessions(20),
-        "playtime": store.playtime(days=7, limit=10),
+        "playtime": store.playtime(days=max(1, span["hours"] // 24), limit=10),
     }
+    with _history_lock:
+        _history_cache[key] = (time.time(), value)
+    return value
+
+
+def full_state(span_key=None):
+    span = span_spec(span_key or DEFAULT_SPAN)
+    state = dict(live_state())
+    state["generated"] = time.time()
+    state["span"] = span
+    state["history"] = history(span)
     return state
 
 
@@ -182,8 +247,8 @@ def sampler():
             parsed = collect.parse_players(rcon("list"))
         except Exception:      # noqa: BLE001 - server down, try again later
             parsed = None
+        now = int(time.time())
         if parsed:
-            now = int(time.time())
             current = set(parsed[2])
             tps = mspt = None
             try:
@@ -200,6 +265,13 @@ def sampler():
                 events += [(now, name, "leave") for name in sorted(previous - current)]
                 store.add_events(events)
             previous = current
+        else:
+            # A tick with no answer is evidence of downtime, not a gap: record
+            # it so the charts and the availability figure can see it. The
+            # baseline is dropped, so a restart is not read as everyone leaving
+            # and immediately rejoining.
+            store.add_sample(now, 0, up=False)
+            previous = None
         try:
             store.ingest_rejects(BLOCKED_LOG)
         except Exception:      # noqa: BLE001
@@ -399,10 +471,12 @@ class Handler(BaseHTTPRequestHandler):
             self._redirect(f"{LOGIN_URL}?next={quote(path, safe='/')}")
             return
         if path == "/":
-            self._send(200, render.page(full_state(), REFRESH, asset_v=ASSET_VERSION),
+            state = full_state(self._query("span"))
+            self._send(200, render.page(state, REFRESH, asset_v=ASSET_VERSION),
                        "text/html; charset=utf-8")
         elif path == "/state.json":
-            self._send(200, json.dumps(full_state(), indent=2, sort_keys=True, default=str),
+            state = full_state(self._query("span"))
+            self._send(200, json.dumps(state, indent=2, sort_keys=True, default=str),
                        "application/json; charset=utf-8")
         else:
             self._send(404, "not found\n", "text/plain; charset=utf-8")

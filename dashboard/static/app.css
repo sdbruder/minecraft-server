@@ -57,6 +57,54 @@ body > footer button[type="submit"] {
   margin-bottom: 0;
 }
 
+/* ---- metrics page: status banner ----------------------------------------
+ * The first card answers "is the server up?" and spans every column. The
+ * tone comes from data-status on the <article>, so no markup classes are
+ * needed. --mc-down doubles as the outage band colour in the charts. */
+:root {
+  --mc-up: #1a7f37;
+  --mc-warn: #9a6700;
+  --mc-down: #cf222e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mc-up: #3fb950;
+    --mc-warn: #d29922;
+    --mc-down: #f85149;
+  }
+}
+body.dash > main > article[data-status] {
+  column-span: all;
+  border-left: 0.35rem solid currentColor;
+  padding-left: 0.7rem;
+}
+body.dash article[data-status="up"] {
+  color: var(--mc-up);
+}
+body.dash article[data-status="warn"] {
+  color: var(--mc-warn);
+}
+body.dash article[data-status="down"] {
+  color: var(--mc-down);
+}
+/* The headline carries the colour; the evidence underneath stays readable. */
+body.dash article[data-status] h2 {
+  color: currentColor;
+  font-size: 1.05rem;
+}
+body.dash article[data-status] p {
+  color: var(--pico-color);
+  margin-bottom: 0.3rem;
+}
+body.dash article[data-status] nav ul {
+  padding-left: 0;
+  margin-bottom: 0;
+  font-size: 0.8rem;
+}
+body.dash article[data-status] nav li {
+  margin-right: 0.6rem;
+}
+
 /* ---- metrics page: multi-column flow ------------------------------------
  * `column-width: 26rem` fits 1 column on a phone, 2 on a laptop, 3-5 on a
  * wide/ultrawide screen; `column-count: 5` caps it so columns never get

@@ -231,6 +231,25 @@ def server_uptime_seconds():
     return _unit_uptime()
 
 
+def server_pid():
+    """PID of the Paper process, or None when it is not running."""
+    return _find_java_pid()
+
+
+def unit_state(unit="autoplug.service"):
+    """``systemctl is-active``: 'active', 'inactive', 'failed', 'activating', …
+
+    None when the query itself fails, which is different from 'inactive'.
+    """
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", unit], capture_output=True, text=True, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() or None
+
+
 # ----------------------------------------------------------- formatting -----
 
 def human_size(num):

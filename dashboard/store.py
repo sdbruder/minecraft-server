@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS samples (
     ts      INTEGER PRIMARY KEY,
     players INTEGER NOT NULL,
     tps     REAL,
-    mspt    REAL
+    mspt    REAL,
+    up      INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS sessions (
     ts     INTEGER NOT NULL,
@@ -36,10 +37,53 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 
-def _iso(epoch):
-    return datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).strftime(
+# Time windows the charts offer: key -> (label, hours, bucket seconds). The
+# bucket sizes keep every span at 48-168 points, which is all a rendered SVG
+# can usefully show. This table lives here (not in the renderer) so the query
+# and the panel title can never disagree about the window.
+SPANS = {
+    "24h": ("last 24h", 24, 1800),
+    "7d": ("last 7 days", 24 * 7, 3600),
+    "30d": ("last 30 days", 24 * 30, 6 * 3600),
+    "90d": ("last 90 days", 24 * 90, 86400),
+}
+DEFAULT_SPAN = "24h"
+
+
+def span_spec(key):
+    """Resolve a requested span key to {key, label, hours, bucket}."""
+    key = key if key in SPANS else DEFAULT_SPAN
+    label, hours, bucket = SPANS[key]
+    return {"key": key, "label": label, "hours": hours, "bucket": bucket}
+
+
+def _iso(value):
+    return datetime.datetime.fromtimestamp(value, datetime.timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%S%z"
     )
+
+
+_ISO_FORMATS = ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z")
+
+
+def parse_iso(value):
+    """Epoch for a 'YYYY-MM-DDTHH:MM:SS+ZZZZ' stamp, or None.
+
+    The offsets in blocked-joins.log vary (+0000 and -0300 both occur), so
+    comparing those strings in SQL would sort them by local clock time; parse
+    instead. Volume here is a handful of rows per day.
+    """
+    if not value:
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+0000"
+    for fmt in _ISO_FORMATS:
+        try:
+            return int(datetime.datetime.strptime(text, fmt).timestamp())
+        except ValueError:
+            continue
+    return None
 
 
 class Store:
@@ -50,6 +94,22 @@ class Store:
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
         self._db.commit()
+        self._migrate()
+
+    def _migrate(self):
+        """Columns a database created by an older version lacks.
+
+        ``samples.up`` arrived on 2026-10-16. Defaulting it to 1 is correct for
+        the rows written before it existed: back then a sample was only written
+        when RCON answered, i.e. while the server was up.
+        """
+        columns = {row["name"] for row in self._db.execute("PRAGMA table_info(samples)")}
+        if "up" not in columns:
+            with self._lock:
+                self._db.execute(
+                    "ALTER TABLE samples ADD COLUMN up INTEGER NOT NULL DEFAULT 1"
+                )
+                self._db.commit()
 
     def close(self):
         with self._lock:
@@ -57,11 +117,15 @@ class Store:
 
     # ------------------------------------------------------------- writes ---
 
-    def add_sample(self, ts, players, tps=None, mspt=None):
+    def add_sample(self, ts, players, tps=None, mspt=None, up=True):
+        """One sampler tick. ``up=False`` records a tick where RCON did not
+        answer: ``players`` is then meaningless (0) and readers filter it out;
+        the row exists so the outage is visible in the history."""
         with self._lock:
             self._db.execute(
-                "INSERT OR REPLACE INTO samples (ts, players, tps, mspt) VALUES (?,?,?,?)",
-                (ts, players, tps, mspt),
+                "INSERT OR REPLACE INTO samples (ts, players, tps, mspt, up) "
+                "VALUES (?,?,?,?,?)",
+                (ts, players, tps, mspt, 1 if up else 0),
             )
             self._db.commit()
 
@@ -153,20 +217,87 @@ class Store:
     def latest_sample(self):
         with self._lock:
             row = self._db.execute(
-                "SELECT ts, players, tps, mspt FROM samples ORDER BY ts DESC LIMIT 1"
+                "SELECT ts, players, tps, mspt, up FROM samples ORDER BY ts DESC LIMIT 1"
             ).fetchone()
         return dict(row) if row else None
 
-    def players_series(self, hours=24, bucket=1800):
-        """MAX players per bucket, newest last: [(bucket_ts, players)]."""
+    def samples_series(self, hours=24, bucket=1800):
+        """Per-bucket history for the charts, oldest first.
+
+        [(bucket_ts, max_players, avg_tps, down_ticks, ticks)]. Buckets with no
+        samples at all are absent, so a gap in the series means "no data"
+        (the dashboard was not sampling) while ``down_ticks`` around it mean
+        "sampled, and the server was down". ``max_players``/``avg_tps`` are
+        None when every tick in the bucket was a down tick.
+        """
         since = int(time.time()) - hours * 3600
         with self._lock:
             rows = self._db.execute(
-                "SELECT ts / ? * ? AS bucket, MAX(players) AS players "
-                "FROM samples WHERE ts >= ? GROUP BY bucket ORDER BY bucket",
+                "SELECT ts / ? * ? AS bucket,"
+                "       MAX(CASE WHEN up = 1 THEN players END) AS players,"
+                "       AVG(CASE WHEN up = 1 THEN tps END) AS tps,"
+                "       SUM(CASE WHEN up = 0 THEN 1 ELSE 0 END) AS down_ticks,"
+                "       COUNT(*) AS ticks"
+                " FROM samples WHERE ts >= ? GROUP BY bucket ORDER BY bucket",
                 (bucket, bucket, since),
             ).fetchall()
-        return [(row["bucket"], row["players"]) for row in rows]
+        return [
+            (row["bucket"], row["players"], row["tps"], row["down_ticks"], row["ticks"])
+            for row in rows
+        ]
+
+    def down_intervals(self, hours=24, merge=90):
+        """Outages in the last ``hours`` as [(start, end)] epochs.
+
+        Consecutive down ticks belong to the same outage; ``merge`` is the
+        longest gap (seconds) still treated as one — three missed ticks at the
+        30 s cadence, so two outages minutes apart stay separate.
+        """
+        since = int(time.time()) - hours * 3600
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT ts FROM samples WHERE up = 0 AND ts >= ? ORDER BY ts",
+                (since,),
+            ).fetchall()
+        spans = []
+        for row in rows:
+            ts = row["ts"]
+            if spans and ts - spans[-1][1] <= merge:
+                spans[-1][1] = ts
+            else:
+                spans.append([ts, ts])
+        return [tuple(item) for item in spans]
+
+    def availability(self, hours=24):
+        """How much of the sampled time the server was up, or None if nothing
+        was sampled. ``outage_start`` is set only while an outage is running."""
+        since = int(time.time()) - hours * 3600
+        with self._lock:
+            row = self._db.execute(
+                "SELECT COUNT(*) AS ticks, SUM(up) AS up_ticks, MAX(ts) AS last_ts "
+                "FROM samples WHERE ts >= ?",
+                (since,),
+            ).fetchone()
+            if row is None or not row["ticks"]:
+                return None
+            last_up = self._db.execute(
+                "SELECT MAX(ts) AS ts FROM samples WHERE up = 1"
+            ).fetchone()["ts"]
+            outage = self._db.execute(
+                "SELECT MIN(ts) AS ts FROM samples WHERE up = 0 AND ts > ?",
+                (last_up if last_up is not None else 0,),
+            ).fetchone()["ts"]
+        ticks = row["ticks"]
+        up_ticks = row["up_ticks"] or 0
+        return {
+            "ticks": ticks,
+            "up_ticks": up_ticks,
+            "down_ticks": ticks - up_ticks,
+            "up_pct": 100.0 * up_ticks / ticks,
+            "last_ts": row["last_ts"],
+            "last_up_ts": last_up,
+            "outage_start": outage if row["last_ts"] != last_up else None,
+        }
 
     def recent_sessions(self, limit=20):
         with self._lock:
@@ -202,15 +333,19 @@ class Store:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def rejects_per_day(self, days=30):
-        since = _iso(int(time.time()) - days * 86400)
+    def rejects_series(self, hours=24, bucket=1800):
+        """Rejected joins per bucket in the last ``hours``: [(bucket_ts, n)]."""
+        since = int(time.time()) - hours * 3600
         with self._lock:
-            rows = self._db.execute(
-                "SELECT substr(ts_iso, 1, 10) AS day, COUNT(*) AS n FROM rejects "
-                "WHERE ts_iso >= ? GROUP BY day ORDER BY day",
-                (since,),
-            ).fetchall()
-        return [(row["day"], row["n"]) for row in rows]
+            rows = self._db.execute("SELECT ts_iso FROM rejects").fetchall()
+        counts = {}
+        for row in rows:
+            ts = parse_iso(row["ts_iso"])
+            if ts is None or ts < since:
+                continue
+            slot = ts // bucket * bucket
+            counts[slot] = counts.get(slot, 0) + 1
+        return sorted(counts.items())
 
     def top_rejected(self, limit=10):
         with self._lock:

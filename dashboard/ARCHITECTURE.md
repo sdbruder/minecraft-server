@@ -44,7 +44,8 @@ One HTML page, served by the server itself, that shows at a glance:
 | Framework | **none** — `ThreadingHTTPServer` + one `BaseHTTPRequestHandler` | No magic, no routing layer to learn | Flask/FastAPI |
 | CSS | **Pico CSS v2, classless variant, vendored** (`dashboard/static/pico.classless.min.css`) | Semantic HTML needs **no classes**, so `render.py` emits plain `<table>`/`<h2>` and the server stays the only place with logic; one ~10 KB file served locally, so no CDN, works offline | hand-written style block; Water.css (plainer tables); Bootstrap (~227 KB, a class on every element); Tailwind (build step) |
 | Layout | **`static/app.css`** (~2.5 KB) on top of Pico, multi-column flow | Pico scales the root font with the viewport (131.25% at ≥1536px) and caps content at 1450px, which reads oversized for a metrics page and wastes a wide screen. The override pins the type size, adds a full-width container and flows the cards into `columns: 5 26rem` — 2 columns on a laptop, 4 at 1920, 5 at 3440 | CSS grid (unequal card heights leave row gaps), masonry (not portable), a class-based framework (markup churn) |
-| Frontend logic | **none** — `<meta http-equiv="refresh">` + server-rendered inline SVG | "Simplest": the server renders everything, including the charts | JS `fetch`/Chart.js/WebSocket |
+| Frontend logic | **none** — `<meta http-equiv="refresh">` + server-rendered inline SVG | "Simplest": the server renders everything, including the charts. The timespan switch is a plain link (`?span=7d`), which the meta refresh keeps, and values are read on hover through SVG `<title>` — so interactivity needs no JavaScript either | JS `fetch`/Chart.js/uPlot/WebSocket |
+| Chart window | **`?span=24h\|7d\|30d\|90d`**, bucket sizes 30 min→1 day | One table (`store.SPANS`) feeds both the query and the panel title, so they cannot drift; every span stays at 48-168 points | client-side zoom/pan (needs JS); a fixed window |
 | Storage | **SQLite** (`sqlite3`, stdlib) | Embedded, one file, zero services, real SQL for time buckets; enough for a time series of this size | see "Storage" below |
 | Player source (live) | **RCON `list`** on `127.0.0.1:25575` | Authoritative live count + names; no join/leave state to maintain | parsing `latest.log` joins (fragile — a chat plugin rewrites `X joined the game` to `System chat: ...`) |
 | Player history | **RCON `list` sampled every 30 s, diffed** | Robust: exact names from RCON, transitions derived from consecutive samples (±30 s) | log-derived sessions (same fragility), player-event plugins |
@@ -78,8 +79,16 @@ Alternatives and why not, for this scale:
 ### Schema (sketch)
 
 ```sql
--- one row per sampler tick (drives the "players online" chart)
-CREATE TABLE samples (ts INTEGER PRIMARY KEY, players INTEGER, tps REAL, mspt REAL);
+-- one row per sampler tick (drives the "players online" and TPS charts).
+-- up = 0 marks a tick where RCON did not answer: `players` is meaningless (0)
+-- then and readers filter it out, so a row is *evidence* of an outage rather
+-- than a gap. `up` was added on 2026-10-16; Store._migrate() ALTERs it in with
+-- DEFAULT 1, which is correct for the older rows (they were only written while
+-- the server answered).
+CREATE TABLE samples (
+  ts INTEGER PRIMARY KEY, players INTEGER, tps REAL, mspt REAL,
+  up INTEGER NOT NULL DEFAULT 1
+);
 
 -- join/leave transitions derived from consecutive samples
 CREATE TABLE sessions (
@@ -133,8 +142,11 @@ the app ever writes.
 | World size | `du` of `level-name` dir | computed in-process (walk + sum) |
 | TPS / MSPT + uptime | RCON `tps` / `mspt`, `/proc` or `systemd` | hidden if the commands are unavailable |
 | Rejected joins (recent) | SQLite `rejects` | newest first, with name + IP |
-| Rejected joins (history) | SQLite `rejects` | count per day, top names/IPs |
-| Players online (chart) | SQLite `samples` | inline SVG bars, last 24 h |
+| Rejected joins (history) | SQLite `rejects` | count per bucket over the span, top names/IPs |
+| Server up/down (banner) | RCON + `systemctl is-active` + `/proc` | the first card, full width |
+| Availability % | SQLite `samples.up` | share of sampled ticks that answered |
+| Players online (chart) | SQLite `samples` | inline SVG line, peak per bucket, outage bands |
+| TPS (chart) | SQLite `samples.tps` | inline SVG line, average per bucket |
 | Play sessions | SQLite `sessions` | recent joins/leaves, and per-player playtime |
 | Paper / Minecraft / Java | head of `logs/latest.log` | `Loading Paper … for Minecraft 26.2`, `Running Java 25 …` |
 | Plugins + versions | `plugin.yml` inside `plugins/*.jar` | fallback to the jar filename |
@@ -143,8 +155,8 @@ the app ever writes.
 
 | method | path | response |
 |---|---|---|
-| `GET` | `/` | the HTML page (all panels) |
-| `GET` | `/state.json` | same data as JSON, for scripting |
+| `GET` | `/` | the HTML page (all panels); `?span=24h\|7d\|30d\|90d` picks the chart window (an unknown value falls back to 24h) |
+| `GET` | `/state.json` | same data as JSON, for scripting (same `?span=`) |
 | `GET` | `/static/pico.classless.min.css` | the vendored stylesheet |
 | `GET` | `/healthz` | `ok` — for systemd/nginx checks |
 | `GET` | `/login` | the sign-in form (redirects to `/` when already signed in) |
@@ -215,7 +227,8 @@ server-side.
 
 | failure | effect | mitigation |
 |---|---|---|
-| Minecraft down / RCON refused | players, TPS, sampler pause | each collector isolated; short RCON timeout; sampling resumes when RCON returns |
+| Minecraft down / RCON refused | the banner turns red, players/TPS live panels degrade | each collector is isolated (one failing source never breaks the page); the sampler keeps ticking and records `up = 0`, so the outage becomes a band in the charts and lowers the availability figure. `starting` vs `down` is told apart with `systemctl is-active` + the Paper pid + uptime. |
+| `systemctl`/`/proc` unavailable | status reads `down` while RCON is fine | RCON is checked first: a working RCON always wins, so a broken unit-query cannot make a live server look dead |
 | app restart | potential fake mass-leave | first tick is a baseline, emits no events |
 | `blocked-joins.log` missing | rejects panel empty | treat as empty; ingest resumes when it appears |
 | SQLite locked/corrupt | history panels fail | single writer (sampler) + short timeout; file is disposable |
@@ -232,3 +245,32 @@ server-side.
   binds `127.0.0.1:8080` only.
 - Extras included: TPS/MSPT + uptime, world size, `/state.json`, and the player
   and rejected-join history.
+
+## Decisions taken (2026-10-16): outages, charts, timespans
+
+- **Uptime is data, not a live probe.** The sampler now writes a row on every
+  tick, `up = 0` when RCON does not answer, instead of skipping the tick. That
+  turns "the dashboard was not running" (no row) and "the server was down" (a
+  row with `up = 0`) into two distinguishable states, which is what the outage
+  bands and the availability percentage are drawn from.
+- **The banner is the answer to "is it up?".** One full-width card, first on
+  the page, with the unit state, the Paper pid, the uptime, the player count
+  and how much of the selected window was up. It is toned through
+  `data-status` (up/warn/down) rather than classes; `--mc-down` doubles as the
+  chart band colour.
+- **One chart engine, a real time axis.** `time_chart()` replaced the old
+  bar-per-index renderer: points are placed by timestamp, so a missing bucket is
+  a gap and never a fake zero, and sparse data (7 rejected joins ever) cannot
+  flatten the axis. It draws y gridlines on 1/2/5×10ⁿ steps, four x labels
+  formatted for the window, an area+line or bars, outage bands behind the
+  series, and `<title>` tooltips so hovering works without JavaScript.
+- **Spans are links, not client state.** `?span=` is re-queried server-side and
+  survives the 15 s meta refresh; `/state.json?span=` gives scripts the same
+  window. History is cached ~20 s per span, so a 90-day query does not run on
+  every page load.
+- **`playtime` follows the span** so "Most played — last 7 days" is honest when
+  the window is 24 h or 90 d.
+- **Not chosen:** vendoring a JS charting library (uPlot/Chart.js) for zoom and
+  pan. It would be ~50 KB and a second rendering path for a page that must work
+  with no build step; the server-rendered SVG covers what the data supports at
+  this cadence.
