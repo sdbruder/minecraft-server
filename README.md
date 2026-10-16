@@ -273,12 +273,62 @@ the newer version is confirmed.
 `autoplug/updater.yml` also drives the plugin checks: `plugins-updater.version`
 is empty, so it inherits `server-updater.version` (26.2).
 
+### Java (java-updater is off, on purpose)
+
+```yaml
+updater:
+  java-updater:
+    enable: false
+    version: 25     # informational only while the updater is disabled
+```
+
+While `java-updater` is enabled, AutoPlug refuses to start the server unless it
+finds *its own* managed JRE (one it installed under `autoplug/system/jre/`)
+matching the configured major version:
+
+```
+[WARN] Failed to start server: Java-Updater is enabled, but Java-Installation was not found!
+       com.osiris.autoplug.client.Server.createProcess(Server.java:234)
+```
+
+On 2026-10-16 the updater ran during a restart with `version: 21` while the
+managed JRE is Temurin **25** (`jdk-25.0.4+7`). After that run the start check
+could not be satisfied at all, so the server stayed down through two restarts
+(Paper's last log line was a shutdown at 15:10:21). With the updater disabled the
+check does not apply, and `general.yml`'s
+`start-command: java -jar "/home/steve/minecraft/paper.jar"` runs the **system**
+JDK (`/usr/lib/jvm/java-25-openjdk-arm64`, OpenJDK 25.0.4.1) that apt maintains.
+
+Do not re-enable it without first making `version` agree with what is installed
+in `autoplug/system/jre/`; `autoplug/system/jre/` (303 MB) is unused while it is
+off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
+
 ## Backlog
 
-See `TASKS.md`. Next up: a read-only web dashboard for server metrics
-(connected players, rejected joins, versions, plugins) on a non-80 port.
+See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-16 - Server outage: AutoPlug's java-updater vs the installed JRE
+
+- The server went down at 15:10:21 and did not come back through two restarts.
+  Paper logged its shutdown, then AutoPlug refused to start it:
+  `Failed to start server: Java-Updater is enabled, but Java-Installation was
+  not found!` (`Server.createProcess:234`).
+- Cause: `updater.yml` had `java-updater.version: 21` while the managed JRE is
+  Temurin **25** (`autoplug/system/jre/jdk-25.0.4+7`). The updater ran during the
+  15:09 restart and left the managed installation in a state its own start-check
+  rejected. The JRE itself was intact (`bin/java` present, runs `java -version`);
+  nothing was deleted by the disk cleanup.
+- Fix: `java-updater.enable: false`. AutoPlug then started the server through
+  `start-command: java -jar "/home/steve/minecraft/paper.jar"` using the system
+  JDK (`/usr/lib/jvm/java-25-openjdk-arm64`, OpenJDK 25.0.4.1). Up in ~25 s,
+  RCON answering, all services active. Config backup:
+  `autoplug/updater.yml.pre-java-version-fix.bak`.
+- This mattered beyond the outage: with the updater enabled the same check runs
+  after the daily 05:00 restart, so the server could have stayed down overnight.
+  The 05:00 backup that morning followed by a manual start at 06:28 looks like
+  this bug firing once already.
 
 ### 2026-10-16 - Offsite backups to a Hetzner Storage Box
 
