@@ -37,17 +37,14 @@ It streams a `tar.gz` from the remote host into the repo root as
 
 ## Backups
 
-> Status: the local archive + pruning job are in place. The Storage Box upload
-> below still needs the box's host/username and one forced backup to confirm
-> (see `upload.*` in the table).
-
 Two independent things keep the world safe.
 
 **AutoPlug's daily archive** (05:00 server time) is written to
 `~/minecraft/autoplug/backups` and kept for `backup.max-days: 3` (~1.1 GB). Its
 `exclude` list drops everything re-downloadable (`cache`, `libraries`,
 `versions`, `server.jar`, `spigot.jar`, `AutoPlug-Files.zip`, `dashboard`), so
-an archive is ~360 MB instead of ~890 MB. Config: `~/minecraft/autoplug/backup.yml`.
+an archive is ~314 MB instead of ~890 MB (measured: `2026-10-16-15.10-BACKUP.zip`
+= 328,763,224 bytes). Config: `~/minecraft/autoplug/backup.yml`.
 
 **Offsite copy:** AutoPlug uploads each archive to a Hetzner **Storage Box**
 over SFTP. Note it has **no S3 support** — its uploader speaks FTPS/SFTP or
@@ -58,14 +55,20 @@ password is stored anywhere.
 | setting | value |
 |---|---|
 | `upload.enable` | `true` |
-| `upload.host` / `upload.port` / `upload.username` | the Storage Box, `22`, `uXXXXX` |
+| `upload.host` | `u123456.your-storagebox.de` (`198.51.100.9`) |
+| `upload.port` / `upload.username` | `22` / `u123456` |
 | `upload.path` | `minecraft` |
 | `upload.rsa-key-path` | `/home/steve/.ssh/id_rsa_storagebox` |
 | `upload.delete-on-complete` | `false` — the local 3-day window stays |
 
 A non-empty `rsa-key-path` is what makes AutoPlug use SFTP instead of FTPS. The
 key pair is `~/.ssh/id_rsa_storagebox` (RSA 4096 — the `jsch` bundled in the
-client predates ed25519); the public half is registered on the box.
+client predates ed25519); the public half is registered on the box. AutoPlug
+will not create the remote folder, so `minecraft/` was made once with `sftp`.
+
+AutoPlug watches `backup.yml` for changes (`[BackupConfig] Listening for
+changes…`), but it also rewrites the file on load, so comments added by hand
+there do not survive — this README is the documentation.
 
 **Pruning the remote:** AutoPlug prunes its local directory but never the
 remote one, so `mc-backup-prune.timer` runs `scripts/backup-prune.sh` daily at
@@ -82,8 +85,8 @@ journalctl -u mc-backup-prune
 Credentials for it live in `~/minecraft/storagebox.env` (mode 600, git-ignored):
 
 ```
-SB_HOST=uXXXXX.your-storagebox.de
-SB_USER=uXXXXX
+SB_HOST=u123456.your-storagebox.de
+SB_USER=u123456
 SB_KEY=/home/steve/.ssh/id_rsa_storagebox
 SB_PATH=minecraft
 SB_RETAIN_DAYS=30
@@ -276,6 +279,22 @@ See `TASKS.md`. Next up: a read-only web dashboard for server metrics
 (connected players, rejected joins, versions, plugins) on a non-80 port.
 
 ## Changelog
+
+### 2026-10-16 - Offsite backups to a Hetzner Storage Box
+
+- AutoPlug now uploads every archive to `u123456.your-storagebox.de` over SFTP
+  (port 22, key auth, `path: minecraft`, `delete-on-complete: false` so the
+  local 3-day window stays). AutoPlug 10.2.0 has no S3 support — FTPS/SFTP or
+  Google Drive only — so the Storage Box is its native fit.
+- `mc-backup-prune.timer` (daily 06:30 UTC, enabled) keeps the remote at 30 days
+  with `scripts/backup-prune.sh`; AutoPlug never prunes the remote side itself.
+- Verified end to end: an AutoPlug restart triggered a real backup (314 MB) and
+  the upload completed in ~5 s (`[OK][BackupTask] … Completed backup & upload`),
+  leaving 328,763,224 bytes on the box. A decoy `2026-08-01-…-BACKUP.zip` was
+  then pruned through the systemd unit while the real archive was left alone.
+- The box's hostname did not resolve at first (NXDOMAIN from the server and from
+  1.1.1.1 while authoritative servers answered): negative DNS caching, cleared
+  with `resolvectl flush-caches`.
 
 ### 2026-10-16 - Alerts: also notify on leaves
 
