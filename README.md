@@ -347,6 +347,39 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-17 - PlaytimeLimit installed (day boundary patched to local time)
+
+- Modrinth **PlaytimeLimit** 1.0.0 (`DMhofPzM`, Apache-2.0, bukkit/paper/spigot,
+  `api-version: 1.20`, sha512 `b6d48f351fb4…005d`) downloaded,
+  checksum-verified and audited before it went near the live server: plain
+  Bukkit API only (join/quit listeners, `BukkitRunnable`,
+  `YamlConfiguration`, `Player#kickPlayer`) — no networking, no `Runtime`, no
+  reflection; Java 17 bytecode, fine on Java 25.
+- Limits as shipped and as chosen: **60 min/day Mon–Fri, 120 Sat–Sun, 60-min
+  sessions with a 10-min forced break**, warnings at 15/5/1 min, and the daily
+  first-login `give {player} minecraft:cookie 1` kept on.
+- Bug found by inspection: its day boundary is a hardcoded
+  `ZoneId.of("Asia/Shanghai")` in three classes, with no `timezone` key in the
+  config — so the daily reset would land at **13:00 in Sao Paulo** and an
+  evening would count into the next local day. `America/Rio_de_Janeiro` is not
+  in this JDK's tzdb (`ZoneRulesException`; no such file in
+  `/usr/share/zoneinfo` either), so the constant was patched to
+  **`America/Sao_Paulo`** (UTC-3, no DST — verified accepted by the very JDK the
+  server runs: offset `-03:00`, local date `2026-10-17` while Shanghai said
+  `2026-10-18`).
+- `scripts/patch-jar-zone.py` rewrites the `CONSTANT_Utf8` entry in place: 3
+  constants, jar 20696 → 20707 bytes, `javap` parses all four classes
+  afterwards, zip integrity OK, and no `Asia/Shanghai` remains. The pristine
+  jar is kept as `/tmp/plugstage/PlaytimeLimit-1.0.0.jar.orig` (sha256
+  `da8ee95e…`), so the change stays reproducible and reviewable.
+  **Consequence: the installed jar no longer matches the upstream hash.**
+- Installation waits for an empty server (3 players were on at 21:18). The
+  watcher then restarts and verifies the enable line, the generated
+  `plugins/PlaytimeLimit/config.yml` and a `/playtimelimit reload` round trip
+  over RCON; if the plugin did not enable it removes the jar and reports —
+  Paper disables a broken plugin rather than crashing, and a disabled plugin
+  changes nothing at runtime, so no second restart is needed.
+
 ### 2026-10-16 - Dashboard: the player chart now says "so far"
 
 - The chart plots the **peak per bucket**, so its newest point is the busiest
