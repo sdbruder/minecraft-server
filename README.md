@@ -416,7 +416,16 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 - The replacement watcher waits for a **new log session** *and* a working RCON
   before judging anything, then requires the Geyser and ViaVersion lines in the
   fresh log, and rolls back only on a real failure.
-- Status: **not yet applied** — two players were online all evening.
+- **Applied** the same evening: the server emptied at 18:02:40, the watcher
+  installed both jars, restarted, and verified in the fresh session
+  (`geyser: Loading Geyser version 2.11.3-b1254`, `via: ViaVersion (5.12.1)`,
+  RCON answering, no load errors) at 18:03:37. The 05:00 restart then confirmed
+  it under AutoPlug's own start. Geyser rewrote its `config.yml` on first start
+  (its 1254 changelog mentions config cleanup, and new keys such as
+  `validate-bedrock-login` / `use-waterdogpe-forwarding` appear) — the watcher
+  diffed it against the pre-upgrade file.
+- Note also that AutoPlug moved `paper.jar` to **26.2 build 134** at the 05:00
+  restart; the Geyser pin in "Version pin" still applies to 26.3.
 
 ### 2026-10-16 - Server outage: AutoPlug's java-updater vs the installed JRE
 

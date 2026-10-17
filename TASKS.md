@@ -2,7 +2,20 @@
 
 ## Backlog
 
-_Empty._
+### PlaytimeLimit plugin
+
+Status: jar staged, waiting on the limit values.
+
+- Modrinth **PlaytimeLimit** 1.0.0 (`DMhofPzM`, Apache-2.0, Paper/Spigot/Bukkit,
+  api-version 1.20) is downloaded and checksum-verified on the server
+  (`/tmp/plugstage/PlaytimeLimit-1.0.0.jar`). Audited before install: plain
+  Bukkit API only — no networking, no `Runtime`, no reflection; it does call
+  `Player#kickPlayer`.
+- Two open decisions: the daily/session minutes per weekday, and its
+  **hardcoded `Asia/Shanghai` day boundary** (no `timezone` key in `config.yml`,
+  so the daily reset lands at 13:00 São Paulo).
+- Also ships `daily-first-login: give {player} minecraft:cookie 1`, which is on
+  by default and was not asked for.
 
 Shipped (see README "Changelog" for the details):
 
