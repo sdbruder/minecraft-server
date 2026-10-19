@@ -14,7 +14,7 @@
      a 1470x869 laptop viewport (MacBook Air 15", full screen) without a
      scrollbar, together with the per-card rules below. */
   --pico-typography-spacing-vertical: 0.4rem;
-  --pico-block-spacing-vertical: 0.4rem;
+  --pico-block-spacing-vertical: 0.32rem;
   --pico-block-spacing-horizontal: 0.65rem;
   --pico-form-element-spacing-vertical: 0.5rem;
   --pico-line-height: 1.35;
@@ -76,7 +76,7 @@ body.dash > header > div {
 }
 body.dash > header nav {
   flex: none;
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
 }
 body.dash > header nav ul {
   padding-left: 0;
@@ -89,7 +89,7 @@ body.dash > header nav li {
 }
 
 body > footer {
-  padding-block: 0.6rem 1rem;
+  padding-block: 0.4rem 0.7rem;
   font-size: 0.78rem;
 }
 body > footer p {
@@ -193,11 +193,11 @@ body.dash article[data-status] p {
 body.dash > main {
   columns: 5 26rem;
   column-gap: 0.45rem;
-  margin-top: 0.4rem;
+  margin-top: 0.3rem;
 }
 body.dash > main > article {
   break-inside: avoid;
-  margin-block: 0 0.45rem;
+  margin-block: 0 0.38rem;
 }
 
 body.dash article h2 {
@@ -217,14 +217,24 @@ body.dash article h3 {
 /* Compact tables that never overflow a narrow column. */
 body.dash article table {
   font-size: 0.73rem;
+  line-height: 1.2;
   width: 100%;
+}
+/* Timestamp columns: one line each, or every row becomes two rows tall. */
+body.dash article table.stamps td:first-child {
+  white-space: nowrap;
 }
 body.dash article th,
 body.dash article td {
   padding: 0.14rem 0.35rem;
 }
 body.dash article td {
-  overflow-wrap: anywhere;
+  /* break-word, not anywhere: "anywhere" reports a one-character min-content
+     width, so the browser squeezed the timestamp and ip columns and split
+     every row into two lines. break-word breaks only when a whole word cannot
+     fit, so those columns get their real width and the name column uses the
+     remaining space. */
+  overflow-wrap: break-word;
 }
 body.dash article p {
   font-size: 0.78rem;

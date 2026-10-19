@@ -357,6 +357,34 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-19 - Dashboard: fits a 1470x869 laptop screen without scrolling
+
+- Measured on the real database at 1470 wide, the page needed 1108 px against
+  the 869 px of a full-screen MacBook Air 15" viewport, with the middle column
+  777 px tall (both rejected tables plus the rejects chart). It is now 829 px
+  tall with the columns at 679 / 677 / 680, so nothing scrolls at 1470x869
+  (40 px spare) or at 1470x836, i.e. with a bookmarks bar (7 px spare).
+- Rows were the bulk of it. "Rejected joins - most recent" printed the raw
+  `2026-10-19T13:17:11+0000` and `203.0.113.14 (bedrock)` in a 110 px column,
+  so every row wrapped to two lines. It now formats the stamp like the
+  joins/leaves list (`2026-10-19 20:33:31`), `_nb()` glues the short values with
+  no-break spaces, timestamp columns are `white-space: nowrap` (`table.stamps`)
+  and table cells use `overflow-wrap: break-word` — with `anywhere` the browser
+  treats a cell's min-content as one character, which is what squeezed those
+  columns to begin with.
+- Everything else is tighter, not smaller: table line-height 1.2, charts 150
+  units tall (was 180; the rejects chart 130 was 150), card padding
+  0.32/0.65 rem, card gap 0.38 rem, header nav and footer band trimmed. The
+  first pass also took the type scale down (tables 0.73 rem, card h2 0.9 rem,
+  card p 0.78 rem).
+- Card order is part of the layout: the joins/leaves card moved up with the
+  players cards (after the players chart, before TPS). The multi-column
+  balancer only breaks between cards, and this order is what lets it land at
+  ~680 per column instead of 599 / 777 / 691.
+- The first pass (commit a85b887) measured a lean local copy of the database
+  and so "fit" a page that did not exist; every number above was measured
+  against the real data at 1470x869 in Chrome.
+
 ### 2026-10-19 - Dashboard: the joins/leaves list shows the last 15
 
 - "Recent joins / leaves" asked the store for 20 rows; it now shows 15, newest

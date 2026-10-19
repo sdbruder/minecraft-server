@@ -9,7 +9,7 @@ import math
 import time
 
 from collect import human_duration, human_size
-from store import DEFAULT_SPAN, SPANS, span_spec
+from store import DEFAULT_SPAN, SPANS, parse_iso, span_spec
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -86,7 +86,7 @@ def _article(title, body):
     return f"<article>\n<h2>{esc(title)}</h2>\n{body}\n</article>\n"
 
 
-def _table(headers, rows):
+def _table(headers, rows, cls=""):
     if not rows:
         return "<p><em>nothing to show</em></p>\n"
     head = "".join(f"<th>{esc(h)}</th>" for h in headers)
@@ -94,11 +94,23 @@ def _table(headers, rows):
         "<tr>" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>"
         for row in rows
     )
-    return f"<table>\n<thead><tr>{head}</tr></thead>\n<tbody>\n{body}\n</tbody>\n</table>\n"
+    attrs = f' class="{cls}"' if cls else ""
+    return f"<table{attrs}>\n<thead><tr>{head}</tr></thead>\n<tbody>\n{body}\n</tbody>\n</table>\n"
+
+
+def _nb(text):
+    """Join a short value's words so a narrow column cannot split it.
+
+    "203.0.113.13 (bedrock)" used to break between the address and the
+    flavour, which doubled the height of every bedrock row.
+    """
+    return (text or "").replace(" ", "\u00a0")
 
 
 def _clock(epoch, with_date=False, seconds=False):
-    fmt = "%Y-%m-%d %H:%M" if with_date else "%H:%M"
+    # No-break space between date and time: in the narrow table columns the
+    # stamp used to wrap onto two lines and every row became two rows tall.
+    fmt = "%Y-%m-%d\u00a0%H:%M" if with_date else "%H:%M"
     if seconds:
         fmt += ":%S"
     return time.strftime(fmt, time.gmtime(epoch))
@@ -135,7 +147,7 @@ def _series_summary(values):
     return f"peak {_fmt(max(values))}, average {_fmt(sum(values) / len(values))}"
 
 
-def time_chart(points, span, kind="line", width=640, height=180, unit="",
+def time_chart(points, span, kind="line", width=640, height=150, unit="",
                bands=(), y_min=0, integer=False):
     """Inline SVG chart on a real time axis, drawn entirely on the server.
 
@@ -348,15 +360,20 @@ def _sessions_panel(history):
         (_clock(item["ts"], with_date=True, seconds=True), item["player"], item["event"])
         for item in (history.get("sessions") or [])
     ]
-    return _article("Recent joins / leaves", _table(["when", "player", "event"], recent))
+    return _article("Recent joins / leaves", _table(["when", "player", "event"], recent, cls="stamps"))
 
 
 def _rejects_recent_panel(history):
-    rows = [
-        (item["ts_iso"] or item["ts"], item["name"], item["ip"])
-        for item in (history.get("recent_rejects") or [])
-    ]
-    return _article("Rejected joins — most recent", _table(["when (UTC)", "name", "ip"], rows))
+    rows = []
+    for item in history.get("recent_rejects") or []:
+        # Same compact stamp as the joins/leaves list: the raw
+        # "2026-10-19T13:17:11+0000" has no break opportunity that keeps it on
+        # one line, so it wrapped the column and made every row two lines tall.
+        ts = parse_iso(item["ts_iso"])
+        when = _clock(ts, with_date=True, seconds=True) if ts is not None else (item["ts_iso"] or item["ts"])
+        rows.append((when, item["name"], _nb(item["ip"])))
+    return _article("Rejected joins — most recent",
+                    _table(["when (UTC)", "name", "ip"], rows, cls="stamps"))
 
 
 def _rejects_chart_panel(history, span):
@@ -365,14 +382,14 @@ def _rejects_chart_panel(history, span):
     plural = "" if total == 1 else "s"
     return _article(
         f"Rejected joins — per {_bucket_label(span)}, {span['label']}",
-        time_chart(points, span, kind="bars", width=440, height=150, unit=" rejected",
+        time_chart(points, span, kind="bars", width=440, height=130, unit=" rejected",
                    integer=True)
         + f"<p><small>{total} attempt{plural} in this window</small></p>",
     )
 
 
 def _rejects_top_panel(history):
-    rows = [(name, ip, n) for name, ip, n in (history.get("top") or [])]
+    rows = [(name, _nb(ip), n) for name, ip, n in (history.get("top") or [])]
     return _article("Rejected joins — most frequent", _table(["name", "ip", "attempts"], rows))
 
 
@@ -542,9 +559,12 @@ def page(state, refresh=15, asset_v="0"):
         _status_banner(state, span),
         _players_panel(players),
         _players_chart_panel(players, history, span),
+        # The joins/leaves list sits with the players cards: that is where it
+        # belongs, and it also packs the columns evenly (the multi-column
+        # balancer breaks between cards, so card order sets the column heights).
+        _sessions_panel(history),
         _tps_panel(history, span),
         _playtime_panel(history, span),
-        _sessions_panel(history),
         _rejects_recent_panel(history),
         _rejects_chart_panel(history, span),
         _rejects_top_panel(history),
