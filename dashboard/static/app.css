@@ -111,18 +111,22 @@ body > footer button[type="submit"] {
 /* ---- metrics page footer: one row of buttons ---------------------------
  * Both restarts and Sign out share one row, right-aligned, with the caption on
  * the left. Each restart button acts on a single click, so the colour is the
- * warning: red disconnects everyone now, orange waits for an empty server. */
-body.dash > footer {
+ * warning: red disconnects everyone now, orange waits for an empty server.
+ * The console page has the same band, with Metrics where the restarts are. */
+body.dash > footer,
+body.console > footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.4rem 0.8rem;
 }
-body.dash > footer p {
+body.dash > footer p,
+body.console > footer p {
   margin-bottom: 0;
 }
-body.dash > footer > div {
+body.dash > footer > div,
+body.console > footer > div {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -130,7 +134,8 @@ body.dash > footer > div {
 }
 /* Each form is its own row of buttons: the two restarts share one form, so the
    gap has to be here too, or they sit flush against each other. */
-body.dash > footer form {
+body.dash > footer form,
+body.console > footer form {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -245,6 +250,99 @@ body.login > main {
   max-width: 24rem;
   margin-inline: auto;
   padding-top: 1rem;
+}
+
+/* ---- console page: one card, the transcript in Pico's monospace --------
+ * Pico already gives `code, kbd, pre, samp` the monospace family
+ * (--pico-font-family-monospace), the code background and the radius, so only
+ * the panel size and the transcript colours are added here. The log grows with
+ * the session and the page scrolls: the input's autofocus lands on the newest
+ * line, which is what a page without JavaScript can do. */
+body.console > main > article {
+  margin-block: 0.3rem 0.38rem;
+}
+body.console pre.console {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  min-height: 45vh;
+  padding: 0.5rem 0.6rem;
+  white-space: pre-wrap;       /* a long response wraps instead of scrolling sideways */
+  overflow-wrap: break-word;
+}
+body.console pre.console .prompt {
+  color: var(--pico-primary);
+}
+body.console pre.console .error {
+  color: var(--mc-down);
+}
+body.console pre.console .muted {
+  color: var(--pico-muted-color);
+}
+/* Minecraft's §-codes: the vanilla palette, so "§6TPS … §a20.0" reads the way
+   the server meant it. The console background is dark in the dark theme, where
+   the dim half of the palette would vanish — those are lifted below. */
+body.console pre.console {
+  --mc-c0: #000000;
+  --mc-c1: #0000aa;
+  --mc-c2: #00aa00;
+  --mc-c3: #00aaaa;
+  --mc-c4: #aa0000;
+  --mc-c5: #aa00aa;
+  --mc-c6: #ffaa00;
+  --mc-c7: #aaaaaa;
+  --mc-c8: #555555;
+  --mc-c9: #5555ff;
+  --mc-ca: #55ff55;
+  --mc-cb: #55ffff;
+  --mc-cc: #ff5555;
+  --mc-cd: #ff55ff;
+  --mc-ce: #ffff55;
+  --mc-cf: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  body.console pre.console {
+    --mc-c0: #4d4d4d;
+    --mc-c1: #6a6aff;
+    --mc-c2: #4dbb4d;
+    --mc-c3: #3fbdbd;
+    --mc-c4: #e05555;
+    --mc-c5: #c860c8;
+    --mc-c8: #7a7a7a;
+  }
+}
+body.console pre.console .c0 { color: var(--mc-c0); }
+body.console pre.console .c1 { color: var(--mc-c1); }
+body.console pre.console .c2 { color: var(--mc-c2); }
+body.console pre.console .c3 { color: var(--mc-c3); }
+body.console pre.console .c4 { color: var(--mc-c4); }
+body.console pre.console .c5 { color: var(--mc-c5); }
+body.console pre.console .c6 { color: var(--mc-c6); }
+body.console pre.console .c7 { color: var(--mc-c7); }
+body.console pre.console .c8 { color: var(--mc-c8); }
+body.console pre.console .c9 { color: var(--mc-c9); }
+body.console pre.console .ca { color: var(--mc-ca); }
+body.console pre.console .cb { color: var(--mc-cb); }
+body.console pre.console .cc { color: var(--mc-cc); }
+body.console pre.console .cd { color: var(--mc-cd); }
+body.console pre.console .ce { color: var(--mc-ce); }
+body.console pre.console .cf { color: var(--mc-cf); }
+body.console pre.console .bold { font-weight: 700; }
+body.console form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+body.console form label {
+  flex: 1 1 100%;
+  margin-bottom: 0;
+}
+body.console form input[type="text"] {
+  flex: 1 1 18rem;
+  font-family: var(--pico-font-family-monospace);
+}
+body.console form button[type="submit"] {
+  width: auto;
 }
 
 @media (max-width: 30rem) {

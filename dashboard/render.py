@@ -6,6 +6,7 @@ client-side JavaScript. Charts are inline SVG drawn here.
 
 import html
 import math
+import re
 import time
 
 from collect import human_duration, human_size
@@ -73,6 +74,49 @@ LOGIN_PAGE = """<!doctype html>
 </article>
 </main>
 <footer><p><small>Read-only server metrics.</small></p></footer>
+</body>
+</html>
+"""
+
+
+# The console page: same header/footer band as the metrics page, one card with
+# a transcript and a one-line form. No meta refresh — it would take the focus
+# out of the input mid-command — and no JavaScript.
+CONSOLE_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<link rel="stylesheet" href="/static/pico.classless.min.css">
+<link rel="stylesheet" href="/static/app.css?v={asset_v}">
+</head>
+<body class="console">
+<header>
+  <h1>{heading}</h1>
+  <p>{subtitle}</p>
+</header>
+<main>
+<article>
+<h2>RCON console</h2>
+{log}
+<form method="post" action="/console">
+  <label for="command">Command</label>
+  <input type="text" id="command" name="command" list="command-history"
+         maxlength="{max_command}" autocomplete="off" autocapitalize="none"
+         autocorrect="off" spellcheck="false" required autofocus>
+  <button type="submit">Run</button>
+</form>
+{history}
+</article>
+</main>
+<footer>
+  <p><small>{note}</small></p>
+  <div>
+    <a role="button" href="/">Metrics</a>
+    <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+  </div>
+</footer>
 </body>
 </html>
 """
@@ -539,6 +583,7 @@ def _footer_actions(state):
              f'{" disabled" if blocked or waiting else ""}>Restart now</button>')
 
     return (
+        '<a role="button" href="/console">Console</a>'
         f'<form method="post" action="/restart">{first}{second}</form>'
         '<form method="post" action="/logout"><button type="submit">Sign out</button></form>'
     )
@@ -588,6 +633,76 @@ def page(state, refresh=15, asset_v="0"):
 def login_page(error=None, next_path="/", asset_v="0"):
     message = f"<p><strong>{esc(error)}</strong></p>\n" if error else ""
     return LOGIN_PAGE.format(error=message, next=esc(next_path), asset_v=asset_v)
+
+
+_MC_COLOUR_CODES = "0123456789abcdef"
+
+
+def _mc_text(text):
+    """Minecraft's §-codes as HTML: colours and bold, the rest dropped.
+
+    Paper answers RCON in the same format it prints in the log, e.g.
+    "§6TPS from last 1m, 5m, 15m: §a20.0§r", so the console translates the
+    codes instead of showing them. Colours are class names (c0…cf) so the CSS
+    can lift the dim ones for the dark theme; §k/§m/§n/§o have no equivalent
+    here and are dropped.
+    """
+    parts = []
+    style = []
+    for chunk in re.split(r"(§[0-9a-fk-or])", text):
+        if not chunk:
+            continue
+        if len(chunk) == 2 and chunk[0] == "§":
+            code = chunk[1]
+            if code in _MC_COLOUR_CODES:
+                style = [f"c{code}"]        # a colour resets the styles, as in game
+            elif code == "l":
+                style = style + ["bold"]
+            elif code == "r":
+                style = []
+            continue
+        body = esc(chunk)
+        parts.append(f'<span class="{" ".join(style)}">{body}</span>' if style else body)
+    return "".join(parts)
+
+
+def _console_log(entries):
+    """The transcript: what was asked, then what came back.
+
+    One <pre>, so the browser keeps the newlines and Pico's monospace styling
+    applies. The log grows and the page scrolls: the input below carries
+    ``autofocus``, and a browser that focuses it also scrolls it into view, so
+    the newest line ends up on screen without a line of JavaScript.
+    """
+    if not entries:
+        return ('<pre class="console" id="log">'
+                '<span class="muted">no commands yet — try <b>list</b> or <b>tps</b></span></pre>')
+    lines = []
+    for entry in entries:
+        lines.append(f'<span class="prompt">&gt; {esc(entry["command"])}</span>')
+        if entry["error"]:
+            lines.append(f'<span class="error">{esc(entry["error"])}</span>')
+        elif entry["output"].strip():
+            lines.append(_mc_text(entry["output"].rstrip("\n")))
+        else:
+            lines.append('<span class="muted">(no output)</span>')
+    return '<pre class="console" id="log">' + "\n".join(lines) + "</pre>"
+
+
+def console_page(entries, history=(), asset_v="0"):
+    options = "".join(f'<option value="{esc(command)}"></option>' for command in history)
+    datalist = f'<datalist id="command-history">{options}</datalist>' if options else ""
+    return CONSOLE_PAGE.format(
+        asset_v=asset_v,
+        title="RCON console · Minecraft família",
+        heading="Minecraft — família",
+        subtitle="RCON console · commands run as the server console",
+        log=_console_log(entries),
+        history=datalist,
+        max_command=400,
+        note="Runs with the server console's authority (op, ban, stop, …) · "
+             "the transcript is kept in memory only, and the commands go to the journal",
+    )
 
 
 

@@ -29,6 +29,9 @@ list.
 
 Shipped (see README "Changelog" for the details):
 
+- **2026-10-20** — an RCON console at `/console` (linked from the footer row):
+  one command, one answer, monospace, Paper's §-colour codes rendered. It is the
+  only place the dashboard is not read-only.
 - **2026-10-13** — read-only web dashboard: <https://mc.example.com>
   (README "Dashboard", `dashboard/ARCHITECTURE.md`).
 - **2026-10-19** — a Restart button on the dashboard, executed through

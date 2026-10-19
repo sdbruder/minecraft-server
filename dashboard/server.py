@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Minecraft dashboard: read-only server metrics over a small HTTP port.
+"""Minecraft dashboard: server metrics and an RCON console over a small HTTP port.
 
 One process: an HTTP server for browsers plus a sampler thread that keeps the
-SQLite history current. Read-only — the only RCON commands issued are
-``list``, ``tps`` and ``mspt``. See ARCHITECTURE.md.
+SQLite history current. The metrics side is read-only — the sampler's RCON
+commands are ``list``, ``tps`` and ``mspt`` — and the console at ``/console``
+runs whatever is typed into it, as the server console. See ARCHITECTURE.md.
 """
 
 import base64
@@ -22,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import collect            # noqa: E402
 import render             # noqa: E402
+from console import Console   # noqa: E402
 from store import DEFAULT_SPAN, Store, span_spec   # noqa: E402
 
 # ----------------------------------------------------------------- config ---
@@ -98,6 +100,11 @@ _failures = {}          # client ip -> (failure count, window start)
 
 def rcon(command):
     return collect.rcon_command(RCON_HOST, RCON_PORT, RCON_PASSWORD, command)
+
+
+# The console shares the sampler's RCON client and credentials: same socket,
+# same authority, one implementation. Its transcript is in memory only.
+console = Console(rcon)
 
 
 _uptime_cache = {"t": 0.0, "v": None}
@@ -544,6 +551,10 @@ class Handler(BaseHTTPRequestHandler):
             state = full_state(self._query("span"))
             self._send(200, render.page(state, REFRESH, asset_v=ASSET_VERSION),
                        "text/html; charset=utf-8")
+        elif path == "/console":
+            self._send(200, render.console_page(console.entries(), console.history(),
+                                                asset_v=ASSET_VERSION),
+                       "text/html; charset=utf-8")
         elif path == "/state.json":
             state = full_state(self._query("span"))
             self._send(200, json.dumps(state, indent=2, sort_keys=True, default=str),
@@ -633,6 +644,22 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write(f"restart ({mode}) requested by {user}\n")
         self._redirect("/")
 
+    def _console(self):
+        """Run one RCON command and put it in the transcript.
+
+        POST then redirect to GET, so a reload (or the back button) re-runs
+        nothing. No fragment on the redirect: the input's ``autofocus`` is what
+        brings the newest line into view, and a fragment would suppress it.
+        The command — not its output — goes to the journal: that is the audit
+        trail for the one privileged action here.
+        """
+        entry = console.submit(self._form().get("command", ""))
+        if entry is None:
+            self._redirect("/console")
+            return
+        sys.stderr.write(f"rcon ({self._session_user() or '?'}): {entry['command']}\n")
+        self._redirect("/console")
+
     def do_POST(self):
         if not self._same_origin():
             sys.stderr.write(
@@ -655,6 +682,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._redirect(f"{LOGIN_URL}?next=/")
                 return
             self._restart()
+        elif path == "/console":
+            if not self._session_user():
+                self._redirect(f"{LOGIN_URL}?next=/console")
+                return
+            self._console()
         else:
             self._send(405, "method not allowed\n", "text/plain; charset=utf-8")
 

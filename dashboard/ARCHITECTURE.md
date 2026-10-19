@@ -18,12 +18,12 @@ One HTML page, served by the server itself, that shows at a glance:
 
 ## Non-goals
 
-- No console and no command box: nothing on the page lets you type a command
-  or run arbitrary RCON.
-- The **only** write action is "Restart server" (2026-10-19): a confirmed POST
-  that drops a trigger file systemd consumes. It cannot stop the server without
-  restarting it, and it needs no privilege in the web app (see
-  "Restart button" below).
+- No arbitrary commands *beyond* the RCON console (2026-10-20): `/console` runs
+  one RCON command and shows the answer, and that is the whole of it — no file
+  access, no shell, no plugin or world management. See "RCON console" below.
+- The **only** file write is "Restart server" (2026-10-19): a POST that drops a
+  trigger file systemd consumes. It cannot stop the server without restarting
+  it, and it needs no privilege in the web app (see "Restart button" below).
 - No accounts, sessions, or external database service — one shared Basic-auth
   credential and a local SQLite file.
 - No client-side JavaScript, no build step, no CDN. Charts are static SVG
@@ -34,8 +34,9 @@ One HTML page, served by the server itself, that shows at a glance:
 - Listen on a **non-80 port**; expose on `0.0.0.0` **or** behind the existing
   nginx.
 - Run as `steve` under **systemd**, same style as `autoplug.service`.
-- Read-only; **never** expose the RCON password or the AutoPlug server key to
-  the browser. Player names are shown, so the page needs auth.
+- Read-only apart from the restart trigger and the RCON console; **never**
+  expose the RCON password or the AutoPlug server key to the browser. Player
+  names are shown, so the page needs auth.
 - Server facts: Ubuntu 24.04 (aarch64), `python3` 3.12.3, no go/node/bun,
   nginx 1.24 **active** with a `*.example.com` wildcard cert, wildcard DNS
   resolves for any `*.example.com` subdomain, and RCON is already enabled
@@ -168,6 +169,8 @@ the app ever writes.
 | `POST` | `/login` | checks credentials → `302` + session cookie, or `401` with the form and an error |
 | `POST` | `/logout` | clears the cookie → `302 /login` |
 | `POST` | `/restart` | confirmation card; with `?confirm=1` queues a restart (`409` when one is pending or the server is starting) |
+| `GET` | `/console` | the RCON console: transcript + one-line command form |
+| `POST` | `/console` | runs one RCON command, appends it to the transcript → `302 /console` |
 | any other | `*` | `405` / `404`, no body |
 
 - Auth: the `mc_session` cookie on every path except `/healthz`, `/static/`
@@ -216,6 +219,38 @@ refuses (`409`) while a request is already queued or while the server is
 `starting`. The footer disables whichever button cannot act and the banner shows
 the state, so those `409`s are only reachable by hand; because the unit consumes
 the file, the pending state clears itself once the service picks it up.
+
+## RCON console (2026-10-20)
+
+`/console` is the second deliberate write path: one command, one answer. It
+reuses `collect.rcon_command` — the same stdlib RCON client the sampler uses,
+with the same credentials read from `server.properties` — so there is one
+implementation of the protocol and the password still never reaches the
+browser: the page posts the command text and nothing else.
+
+| piece | role |
+|---|---|
+| `dashboard/console.py` | `Console.submit(command)`: run it, catch everything, append `{command, output, error, at}` to a `deque(maxlen=200)` |
+| `POST /console` | POST-redirect-GET, so a reload or the back button re-runs nothing; the command — not its output — goes to the journal as the audit trail |
+| `render.console_page` | one `<pre class="console">` transcript plus a one-line form; Pico already gives `pre` the monospace family, the code background and the radius |
+| `render._mc_text` | Paper answers in §-codes (`§6TPS … §a20.0§r`), so the console turns them into `c0…cf`/`bold` spans; the CSS lifts the dim half of the palette for the dark theme |
+
+Decisions worth keeping:
+
+- **No terminal emulator.** xterm.js (or any WebSocket/SSE stream) is the
+  pre-packaged answer for a *stream*, but RCON is request/response: no cursor
+  movement, no partial writes, no resize. It would also mean JavaScript, a
+  second protocol and a long-lived connection inside a `ThreadingHTTPServer`. A
+  server-rendered `<pre>` does the same job here.
+- **The transcript is memory only** — a console session, not a record. The
+  journal keeps the commands, SQLite keeps the metrics.
+- **History without JavaScript** is the input's `<datalist>`, filled with the
+  distinct recent commands.
+- **Scrolling without JavaScript**: the log grows and the page scrolls; the
+  input carries `autofocus`, and a browser that focuses it also scrolls it into
+  view, so the newest line is on screen after every command. A `#fragment`
+  redirect was tried first and dropped — it suppresses `autofocus`, which would
+  cost a click per command.
 
 ## Runtime & deployment
 

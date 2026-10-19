@@ -243,15 +243,16 @@ journalctl -u mc-watchdog -n 20
 
 ## Dashboard
 
-Read-only metrics at **<https://mc.example.com>**. Sign in with the usual
-username/password **form** (`/login`), so a password manager can save it — no
-browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
+Metrics at **<https://mc.example.com>**, plus an RCON console at `/console`.
+Sign in with the usual username/password **form** (`/login`), so a password
+manager can save it — no browser Basic-auth prompt. The metrics page refreshes
+every 15 s, and nothing here uses JavaScript:
 
 - **is the server up?** — the first cell answers it: up / starting / not
   responding / down, with the `autoplug` unit state, the Paper pid, the uptime,
   the player count and the share of the window that was up;
-- **two restart buttons in the footer row**, next to Sign out, and the page's
-  only write actions: **Restart now** (red — disconnects everyone) and
+- **two restart buttons in the footer row**, next to Sign out, and the metrics
+  page's write actions: **Restart now** (red — disconnects everyone) and
   **Restart when empty** (orange — waits for the last player to leave, up to
   12 h, so nobody is kicked). While a queue is waiting the orange button becomes
   **Cancel restart** and the red one is disabled. Each only drops a trigger file
@@ -264,15 +265,23 @@ browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
   samples" (the dashboard was not running);
 - play sessions, playtime and recent joins/leaves (all following the span);
 - rejected (non-whitelisted) joins: recent list, per-bucket chart, most frequent;
-- TPS/MSPT, server uptime, MOTD, world + size, versions, plugins.
+- TPS/MSPT, server uptime, MOTD, world + size, versions, plugins;
+- **RCON console** (`/console`, linked from the footer row): type a command, get
+  the server's answer — monospace, with Paper's `§`-colour codes rendered as
+  colours. This is the one place the dashboard is not read-only: the command
+  runs with the server console's authority (`op`, `ban`, `stop`, …). The
+  transcript lives in memory only, each command goes to the journal, and the
+  RCON password never reaches the browser — the page posts the command text and
+  the socket is opened server-side. The input remembers recent commands through
+  a `<datalist>`, so history needs no JavaScript either.
 
 Availability is *measured*, not guessed: the 30 s sampler writes a row on every
 tick and marks `up = 0` when RCON does not answer. That flag only exists from
 2026-10-16 onwards — older outages show as gaps rather than bands.
 
 `GET /state.json` returns the same data as JSON; `GET /healthz` is the check
-endpoint (no auth). Nothing is written to the game — the only RCON commands used
-are `list`, `tps` and `mspt`.
+endpoint (no auth). The sampler's RCON commands are `list`, `tps` and `mspt`;
+the console runs whatever is typed into it.
 
 **Auth.** Both login credentials live in `DASH_USER` / `DASH_PASS`. A successful
 login sets `mc_session`: an HMAC-signed cookie (key derived from the password),
@@ -290,8 +299,8 @@ curl -s -b /tmp/mc.jar https://mc.example.com/state.json
   (Pico scales the root font up to 131.25% on wide screens and caps the content
   at 1450px). Type is pinned at 100% and the panels flow into **1–5 columns**:
   2 on a laptop, 4 at 1920, 5 at 3440 — the whole dashboard fits one screen.
-- Source: `dashboard/` (`server.py`, `collect.py`, `store.py`, `render.py`);
-  design notes in `dashboard/ARCHITECTURE.md`.
+- Source: `dashboard/` (`server.py`, `collect.py`, `store.py`, `render.py`,
+  `console.py`); design notes in `dashboard/ARCHITECTURE.md`.
 - Python 3 standard library only — no venv, no dependencies, no build step.
 - History lives in `~/minecraft/dashboard.sqlite` (30 s samples, 90-day
   retention) and is disposable: delete the file to start over.
@@ -356,6 +365,33 @@ off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
 See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-20 - Dashboard: an RCON console at /console
+
+- A second page — one command, one answer — linked from the footer row. It reuses
+  the sampler's RCON client (`collect.rcon_command`) with the same credentials
+  read from `server.properties`, so the RCON password still never reaches the
+  browser: the page posts the command text and the socket is opened server-side.
+- This is the one place the dashboard is not read-only. The command runs with the
+  server console's authority (`op`, `ban`, `stop`, …). Each command is written to
+  the journal as the audit trail, and the transcript is a `deque(maxlen=200)` in
+  memory — a console session, not a record.
+- Still JavaScript-free: one `<pre class="console">` carrying Pico's monospace
+  family and code background, `POST` → `302` → `GET` so a reload re-runs nothing,
+  an `autofocus` input whose focus is what scrolls the newest line into view, and
+  a `<datalist>` for command history.
+- Paper answers RCON in `§`-codes (`§6TPS from last 1m, 5m, 15m: §a20.0§r`), so
+  the console renders them: the 16 colours plus bold as spans, the rest dropped,
+  with the dim half of the palette lifted for the dark theme.
+- Verified against the live server: `list`, `seed`, `tps`, `mspt`, an unknown
+  command, and RCON down (the transcript shows `ConnectionRefusedError` instead
+  of a 500). Also checked: no session → `302 /login?next=/console`, a foreign
+  `Origin` → `403`, an empty command adds no entry, and an 80-line transcript
+  still lands with the newest line and the focused input on screen.
+- No terminal emulator: xterm.js is the pre-packaged answer for a *stream*, but
+  RCON is request/response (no cursor movement, no partial writes, no resize) and
+  it would mean JavaScript, a second protocol and a long-lived connection inside
+  the stdlib HTTP server.
 
 ### 2026-10-19 - Dashboard: fits a 1470x869 laptop screen without scrolling
 
