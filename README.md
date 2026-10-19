@@ -357,6 +357,13 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-19 - Dashboard: the joins/leaves list shows the last 15
+
+- "Recent joins / leaves" asked the store for 20 rows; it now shows 15, newest
+  first. Verified on the rendered page: 20 rows before, 15 after, the oldest
+  shown being 2026-10-18 08:40:19 (130 sessions are in the database, so the cap
+  is what limits it, not the data).
+
 ### 2026-10-19 - Dashboard: the restart buttons move to the footer row
 
 - Two buttons instead of one: **Restart now** (red) and **Restart when empty**

@@ -289,7 +289,7 @@ def history(span):
         "rejects": store.rejects_series(span["hours"], span["bucket"]),
         "top": store.top_rejected(10),
         "recent_rejects": store.recent_rejects(20),
-        "sessions": store.recent_sessions(20),
+        "sessions": store.recent_sessions(15),
         "playtime": store.playtime(days=max(1, span["hours"] // 24), limit=10),
     }
     with _history_lock:
