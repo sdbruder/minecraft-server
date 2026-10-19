@@ -148,7 +148,7 @@ the app ever writes.
 | TPS / MSPT + uptime | RCON `tps` / `mspt`, `/proc` or `systemd` | hidden if the commands are unavailable |
 | Rejected joins (recent) | SQLite `rejects` | newest first, with name + IP |
 | Rejected joins (history) | SQLite `rejects` | count per bucket over the span, top names/IPs |
-| Server up/down (banner) | RCON + `systemctl is-active` + `/proc` | the first card, full width |
+| Server up/down | RCON + `systemctl is-active` + `/proc` | the first cell of the first column |
 | Availability % | SQLite `samples.up` | share of sampled ticks that answered |
 | Players online (chart) | SQLite `samples` | inline SVG line, peak per bucket, outage bands |
 | TPS (chart) | SQLite `samples.tps` | inline SVG line, average per bucket |
@@ -296,11 +296,12 @@ server-side.
   turns "the dashboard was not running" (no row) and "the server was down" (a
   row with `up = 0`) into two distinguishable states, which is what the outage
   bands and the availability percentage are drawn from.
-- **The banner is the answer to "is it up?".** One full-width card, first on
-  the page, with the unit state, the Paper pid, the uptime, the player count
-  and how much of the selected window was up. It is toned through
-  `data-status` (up/warn/down) rather than classes; `--mc-down` doubles as the
-  chart band colour.
+- **The status card is the answer to "is it up?".** It is the first cell of the
+  first column (an ordinary card in the flow, 2026-10-19 — it used to be a
+  full-width `column-span: all` banner), carrying the unit state, the Paper pid,
+  the uptime, the player count and how much of the selected window was up. It is
+  toned through `data-status` (up/warn/down) rather than classes, plus a left
+  accent bar; `--mc-down` doubles as the chart band colour.
 - **One chart engine, a real time axis.** `time_chart()` replaced the old
   bar-per-index renderer: points are placed by timestamp, so a missing bucket is
   a gap and never a fake zero, and sparse data (7 rejected joins ever) cannot

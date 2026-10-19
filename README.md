@@ -247,7 +247,7 @@ Read-only metrics at **<https://mc.example.com>**. Sign in with the usual
 username/password **form** (`/login`), so a password manager can save it — no
 browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
 
-- **is the server up?** — a full-width status card first: up / starting / not
+- **is the server up?** — the first cell answers it: up / starting / not
   responding / down, with the `autoplug` unit state, the Paper pid, the uptime,
   the player count and the share of the window that was up;
 - **two restart buttons in the footer row**, next to Sign out, and the page's

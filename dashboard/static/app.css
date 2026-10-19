@@ -153,12 +153,13 @@ body.dash > footer button[name="mode"]:disabled {
   opacity: 0.45;
 }
 
-/* ---- metrics page: status banner ----------------------------------------
- * The first card answers "is the server up?" and spans every column. The
- * tone comes from data-status on the <article>, so no markup classes are
- * needed. --mc-down doubles as the outage band colour in the charts. */
+/* ---- metrics page: server status ----------------------------------------
+ * The first card answers "is the server up?". It is an ordinary cell, so it
+ * fills the top of the first column like any other card; the left accent keeps
+ * it recognisable at a glance. The tone comes from data-status on the
+ * <article>, so no markup classes are needed. --mc-down doubles as the outage
+ * band colour in the charts. */
 body.dash > main > article[data-status] {
-  column-span: all;
   border-left: 0.35rem solid currentColor;
   padding-left: 0.7rem;
 }
