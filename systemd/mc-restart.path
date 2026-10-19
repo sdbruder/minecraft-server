@@ -1,0 +1,13 @@
+[Unit]
+Description=Watch for a dashboard restart request
+
+[Path]
+# The dashboard runs as `steve` and must not be able to talk to systemd or
+# run sudo, so it only creates this file. This path unit is what turns that
+# request into an action, and it runs as root without giving the web app any
+# privilege at all.
+PathExists=/home/steve/minecraft/restart.request
+Unit=mc-restart.service
+
+[Install]
+WantedBy=paths.target

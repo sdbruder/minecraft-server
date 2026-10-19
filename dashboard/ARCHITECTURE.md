@@ -18,7 +18,12 @@ One HTML page, served by the server itself, that shows at a glance:
 
 ## Non-goals
 
-- No writes to the game: no console, no restart button, no command box.
+- No console and no command box: nothing on the page lets you type a command
+  or run arbitrary RCON.
+- The **only** write action is "Restart server" (2026-10-19): a confirmed POST
+  that drops a trigger file systemd consumes. It cannot stop the server without
+  restarting it, and it needs no privilege in the web app (see
+  "Restart button" below).
 - No accounts, sessions, or external database service — one shared Basic-auth
   credential and a local SQLite file.
 - No client-side JavaScript, no build step, no CDN. Charts are static SVG
@@ -162,6 +167,7 @@ the app ever writes.
 | `GET` | `/login` | the sign-in form (redirects to `/` when already signed in) |
 | `POST` | `/login` | checks credentials → `302` + session cookie, or `401` with the form and an error |
 | `POST` | `/logout` | clears the cookie → `302 /login` |
+| `POST` | `/restart` | confirmation card; with `?confirm=1` queues a restart (`409` when one is pending or the server is starting) |
 | any other | `*` | `405` / `404`, no body |
 
 - Auth: the `mc_session` cookie on every path except `/healthz`, `/static/`
@@ -174,6 +180,30 @@ the app ever writes.
 - Failed logins are throttled per client IP (10 per 15 min → `429`).
 - Per-collector `try/except` + RCON timeout: one failing source degrades one
   panel, never the whole page.
+
+## Restart button (2026-10-19)
+
+The page deliberately had no write path. A restart is the single exception, and
+it is built so the web app still needs no privilege:
+
+| piece | role |
+|---|---|
+| `POST /restart` | renders a confirmation card (there is no JavaScript to ask) that lists who would be disconnected |
+| `POST /restart?confirm=1` | writes `~/minecraft/restart.request`, the only file the app writes outside its SQLite database, then redirects to `/` |
+| `mc-restart.path` | `PathExists=` on that file, runs as root |
+| `mc-restart.service` | removes the trigger, then runs `systemctl restart autoplug` — exactly what an operator would type |
+
+Why not `sudo systemctl restart`: the service runs with
+`NoNewPrivileges=yes`, and making sudo work would hand the web app a
+root-capable command line. Why not RCON `stop`: that relies on AutoPlug
+exiting by itself, and if that assumption is wrong the "restart" button becomes
+a "shut down" button.
+
+Guards: the route needs the session cookie like every other page, passes the
+same `Origin`/`Host` check, and refuses (`409`) while a request is already
+queued or while the server is `starting`. The UI swaps the button for
+`restart requested …` / `a restart is in progress…`, and because the unit
+consumes the file, the pending state clears itself once the service picks it up.
 
 ## Runtime & deployment
 
@@ -235,6 +265,7 @@ server-side.
 | a jar has no `plugin.yml` | that plugin shows filename | fallback |
 | `latest.log` rotated mid-read | versions keep last good value | non-fatal |
 | reload storm | extra RCON calls | cache collector results ~5 s |
+| `mc-restart.path` disabled | the banner keeps saying "restart requested" and nothing happens | `systemctl status mc-restart.path`; the file is only a trigger and is safe to delete |
 
 ## Decisions taken (2026-10-13)
 

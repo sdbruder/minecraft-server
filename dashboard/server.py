@@ -43,6 +43,11 @@ LATEST_LOG = MC_DIR / "logs" / "latest.log"
 BLOCKED_LOG = MC_DIR / "logs" / "blocked-joins.log"
 PLUGINS_DIR = MC_DIR / "plugins"
 
+# The only thing this app writes outside its SQLite file: a trigger file that
+# systemd/mc-restart.path turns into `systemctl restart autoplug`. The app never
+# gets sudo or bus access — see ARCHITECTURE.md.
+RESTART_FILE = Path(os.environ.get("RESTART_FILE") or MC_DIR / "restart.request")
+
 LIVE_TTL = 5.0          # seconds a live snapshot is reused
 WORLD_TTL = 600.0       # seconds the world size is reused (walking is slow)
 HISTORY_TTL = 20.0      # seconds a span's history is reused (a 90 d query)
@@ -127,6 +132,18 @@ def server_pid():
     return _cached(_pid_cache, 30, collect.server_pid)
 
 
+def restart_pending():
+    """Modification time of a queued restart request, or None.
+
+    The file only exists between the click and the path unit consuming it, so
+    "pending" is a state the page can show without keeping any state itself.
+    """
+    try:
+        return RESTART_FILE.stat().st_mtime
+    except OSError:
+        return None
+
+
 def server_status(rcon_ok, uptime):
     """Is the server up? RCON answering is the only proof the *game* is up; the
     unit state and the Paper process explain why it is not.
@@ -183,10 +200,12 @@ def gather_live():
         else None,
         "online_mode": properties.get("online-mode") == "true",
     }
+    status = server_status(players["error"] is None, perf["uptime"])
+    status["restart_pending"] = restart_pending()
     return {
         "players": players,
         "perf": perf,
-        "status": server_status(players["error"] is None, perf["uptime"]),
+        "status": status,
         "versions": collect.parse_versions(collect.read_log_head(LATEST_LOG)),
         "plugins": collect.read_plugins(PLUGINS_DIR),
         "world_size": world_size(),
@@ -499,6 +518,43 @@ class Handler(BaseHTTPRequestHandler):
         self._send(401, render.login_page(error="Wrong username or password.", next_path=target),
                    "text/html; charset=utf-8")
 
+    def _restart(self):
+        """Queue a restart by writing the trigger file the path unit watches.
+
+        Two steps on purpose: a restart disconnects everyone, the page carries
+        no JavaScript to ask for confirmation, and the confirm page doubles as
+        a list of who is about to be disconnected.
+        """
+        status = live_state().get("status") or {}
+        # Not status["restart_pending"]: that comes from the 5 s live cache and
+        # a double-click would slip past it. The file is the source of truth.
+        pending = restart_pending()
+        if self._query("confirm") != "1":
+            self._send(200, render.restart_page(live_state(), asset_v=ASSET_VERSION),
+                       "text/html; charset=utf-8")
+            return
+        if pending is not None:
+            self._send(409, render.restart_page(live_state(), pending=pending,
+                                               asset_v=ASSET_VERSION),
+                       "text/html; charset=utf-8")
+            return
+        if status.get("state") == "starting":
+            self._send(409, render.restart_page(live_state(), busy=True,
+                                               asset_v=ASSET_VERSION),
+                       "text/html; charset=utf-8")
+            return
+        user = self._session_user() or "?"
+        try:
+            RESTART_FILE.write_text(f"{user} {int(time.time())}\n", encoding="utf-8")
+        except OSError as exc:
+            self._send(500, f"could not queue the restart: {exc}\n",
+                       "text/plain; charset=utf-8")
+            return
+        with _live_lock:                      # drop the cache so the redirect
+            _live_cache.update(t=0.0, v=None)  # shows "restart requested"
+        sys.stderr.write(f"restart requested by {user}\n")
+        self._redirect("/")
+
     def do_POST(self):
         if not self._same_origin():
             sys.stderr.write(
@@ -516,6 +572,11 @@ class Handler(BaseHTTPRequestHandler):
             self._login()
         elif path == "/logout":
             self._redirect(LOGIN_URL, {"Set-Cookie": self._cookie_header("", 0)})
+        elif path == "/restart":
+            if not self._session_user():
+                self._redirect(f"{LOGIN_URL}?next=/")
+                return
+            self._restart()
         else:
             self._send(405, "method not allowed\n", "text/plain; charset=utf-8")
 

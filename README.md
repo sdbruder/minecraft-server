@@ -102,6 +102,7 @@ repo (installed to `/etc/systemd/system/`).
 | `autoplug.service` | Runs AutoPlug, the Minecraft server wrapper. Replaces the old `screen` wrapper. |
 | `mc-alerts.service` | The Pushover join alerts (successful and rejected). |
 | `mc-watchdog.timer` | Probes the server once a minute; alerts when it goes down, and again when it comes back. |
+| `mc-restart.path` | Turns the dashboard's Restart button into `systemctl restart autoplug` (the web app has no privileges of its own). |
 | `mc-dashboard.service` | The read-only web dashboard (behind nginx at `mc.example.com`). |
 | `mc-backup-prune.timer` | Daily prune of old backup archives on the Storage Box. |
 
@@ -248,6 +249,11 @@ browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
 - **is the server up?** — a full-width status card first: up / starting / not
   responding / down, with the `autoplug` unit state, the Paper pid, the uptime,
   the player count and the share of the window that was up;
+- **Restart server** — a button in that card, and the page's only write action.
+  It asks for confirmation (naming who will be disconnected), then drops
+  `~/minecraft/restart.request`; `mc-restart.path` turns that into
+  `systemctl restart autoplug` as root. The web app itself keeps
+  `NoNewPrivileges`, no sudo and no systemd access;
 - players online (Java and Bedrock) and charts of peak players and TPS;
 - charts follow a timespan — **24 h / 7 / 30 / 90 days** (`?span=…` links, kept
   across the 15 s refresh); outages are drawn as red bands, and a gap means "no
@@ -346,6 +352,36 @@ off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
 See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-19 - Dashboard: Restart button, without privilege in the web app
+
+- The page was read-only by design; a restart is now its single write action.
+  `POST /restart` renders a confirmation card that names the players who would
+  be disconnected (the page has no JavaScript, so no dialog), and
+  `POST /restart?confirm=1` writes `~/minecraft/restart.request` — the only file
+  the app writes outside its SQLite database.
+- Privilege stays out of the web app: `systemd/mc-restart.path`
+  (`PathExists=`) fires `mc-restart.service`, which removes the trigger and runs
+  `systemctl restart autoplug` as root — exactly what an operator would type.
+  The dashboard keeps `NoNewPrivileges=yes`, no sudo and no bus access. RCON
+  `stop` was rejected: it depends on AutoPlug exiting by itself, and if that
+  assumption were wrong the restart button would become a shutdown button.
+- Guards: session cookie required (`302` to `/login?next=/` otherwise), the
+  usual `Origin`/`Host` check (`403` cross-site), `409` while a request is
+  queued or the server is starting, and the banner swaps the button for
+  `restart requested …` / `a restart is in progress…`.
+- Two bugs caught while testing: the "already queued" check *and* the banner
+  both read the 5 s live cache, so a double-click slipped past the check and the
+  button stayed visible. The check now stats the trigger file itself, and a
+  queued request drops the cache so the redirect already shows the pending line.
+- Evidence: unauthenticated POST → `302 /login?next=/`; confirm card lists the
+  players; cross-origin POST → `403`; confirm → `302 /` + the file; second
+  confirm → `409`; banner shows `restart requested … UTC`. Then end to end
+  through the real trigger: the path unit consumed the file in under 3 s,
+  `mc-restart.service` finished `Result=success`, and `autoplug` came back with
+  a new Paper pid (`ActiveEnterTimestamp` moved to 19:42:46), the whole plugin
+  set re-enabled (PlaytimeLimit 1.0.0, Geyser b1254, ViaVersion 5.12.1) and RCON
+  answering — about 60 s from the click.
 
 ### 2026-10-17 - PlaytimeLimit installed (day boundary patched to local time)
 

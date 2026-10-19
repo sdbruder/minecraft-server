@@ -170,8 +170,21 @@ body.dash article p {
   font-size: 0.82rem;
 }
 
-/* ---- sign-in page: one narrow, centred card ---------------------------- */
-body.login > main {
+/* The one write action on the page: a small, out-of-the-way button. The card
+   is about state; the button is a deliberate, confirmed exception. */
+body.dash article[data-status] form {
+  margin: 0.35rem 0 0;
+}
+body.dash article[data-status] form button {
+  width: auto;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  margin-bottom: 0;
+}
+
+/* ---- sign-in / restart confirmation: one narrow, centred card ---------- */
+body.login > main,
+body.confirm > main {
   max-width: 24rem;
   margin-inline: auto;
   padding-top: 1rem;

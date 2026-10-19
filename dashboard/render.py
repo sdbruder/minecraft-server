@@ -78,6 +78,32 @@ LOGIN_PAGE = """<!doctype html>
 """
 
 
+# The only write action on the page: a restart disconnects everyone, so it gets
+# a POST, a confirmation step (no JavaScript to ask) and a list of who is on.
+RESTART_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Restart · Minecraft família</title>
+<link rel="stylesheet" href="/static/pico.classless.min.css">
+<link rel="stylesheet" href="/static/app.css?v={asset_v}">
+</head>
+<body class="confirm">
+<header>
+  <h1>Minecraft — família</h1>
+  <p>Restart request</p>
+</header>
+<main>
+<article>
+{body}
+</article>
+</main>
+</body>
+</html>
+"""
+
+
 def esc(value):
     return html.escape("—" if value is None else str(value), quote=True)
 
@@ -472,11 +498,23 @@ def _status_banner(state, span):
         summary += (" · this outage started "
                     f"{_clock(availability['outage_start'], with_date=True, seconds=True)} UTC")
 
+    pending = status.get("restart_pending")
+    if pending:
+        action = (f"<p><small>restart requested "
+                  f"{_clock(pending, with_date=True, seconds=True)} UTC — waiting for the "
+                  f"service to pick it up</small></p>")
+    elif name == "starting":
+        action = "<p><small>a restart is in progress…</small></p>"
+    else:
+        action = ('<form method="post" action="/restart">'
+                  '<button type="submit">Restart server</button></form>')
+
     return (
         f'<article data-status="{tone}">\n'
         f"<h2>{esc(headline)}</h2>\n"
         f"<p>{esc(' · '.join(facts))}</p>\n"
         f"<p>{esc(summary)}</p>\n"
+        f"{action}\n"
         f"</article>\n"
     )
 
@@ -521,3 +559,37 @@ def page(state, refresh=15, asset_v="0"):
 def login_page(error=None, next_path="/", asset_v="0"):
     message = f"<p><strong>{esc(error)}</strong></p>\n" if error else ""
     return LOGIN_PAGE.format(error=message, next=esc(next_path), asset_v=asset_v)
+
+
+def restart_page(state, pending=None, busy=False, asset_v="0"):
+    back = '<p><a href="/">Back to the dashboard</a></p>'
+    if pending:
+        body = (
+            "<h2>Restart already queued</h2>\n"
+            f"<p>A request from {_clock(pending, with_date=True, seconds=True)} UTC has "
+            "not been picked up yet — reload in a moment.</p>\n" + back
+        )
+    elif busy:
+        body = (
+            "<h2>Restart in progress</h2>\n"
+            "<p>The server is starting, so there is nothing to do.</p>\n" + back
+        )
+    else:
+        players = state.get("players") or {}
+        names = players.get("names") or []
+        if names:
+            plural = "" if len(names) == 1 else "s"
+            who = (f"<p>This disconnects <strong>{len(names)} player{plural}</strong>: "
+                   f"{esc(', '.join(names))}.</p>")
+        else:
+            who = "<p>Nobody is online, so nobody gets disconnected.</p>"
+        body = (
+            "<h2>Restart the server?</h2>\n"
+            f"{who}\n"
+            "<p>Paper saves the world and shuts down; AutoPlug starts it again — usually "
+            "back in 25–40 s.</p>\n"
+            '<form method="post" action="/restart?confirm=1">'
+            '<button type="submit">Restart now</button></form>\n'
+            '<p><a href="/">Cancel</a></p>'
+        )
+    return RESTART_PAGE.format(asset_v=asset_v, body=body)

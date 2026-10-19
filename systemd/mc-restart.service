@@ -1,0 +1,15 @@
+[Unit]
+Description=Restart the Minecraft server on a dashboard request
+
+[Service]
+Type=oneshot
+# Consume the trigger first: the path unit re-arms as soon as this unit is
+# gone and would otherwise fire again on a file that was already handled.
+ExecStart=/bin/rm -f /home/steve/minecraft/restart.request
+# Exactly what `sudo systemctl restart autoplug` does: Paper saves the world
+# and shuts down, AutoPlug exits, systemd starts the wrapper again.
+ExecStart=/bin/systemctl restart autoplug
+TimeoutStartSec=120
+
+# No dependencies on autoplug on purpose: ordering this unit before or after
+# the unit it restarts is what creates a transaction deadlock.
