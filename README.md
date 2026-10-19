@@ -379,6 +379,10 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
   to idle. Then on the server: the footer markup as served, `400` for a
   missing/bogus `mode`, and `mode=now` → `302` with `mc-restart.service`
   reporting `Result=success`.
+- Fix found on the first look at the page: the two restart buttons were glued
+  together. The `gap` sat on the wrapper `<div>`, which only separates the two
+  *forms*; the buttons inside one form stayed flush. Each form is now its own
+  flex row with the gap — measured 6.3 px and 6.4 px between all three buttons.
 
 ### 2026-10-19 - Dashboard: "Restart when empty", a queue you can cancel
 

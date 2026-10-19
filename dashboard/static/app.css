@@ -125,8 +125,13 @@ body.dash > footer > div {
   align-items: center;
   gap: 0.4rem;
 }
+/* Each form is its own row of buttons: the two restarts share one form, so the
+   gap has to be here too, or they sit flush against each other. */
 body.dash > footer form {
-  display: inline;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
   margin: 0;
 }
 body.dash > footer button[name="mode"] {
