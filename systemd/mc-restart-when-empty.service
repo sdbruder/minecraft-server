@@ -1,0 +1,17 @@
+[Unit]
+Description=Restart the Minecraft server once it is empty
+
+[Service]
+Type=oneshot
+# The script defaults its request/state files to $HOME/minecraft/..., so HOME
+# must be set here: under systemd it is not, and the script would look in
+# /minecraft (this is exactly how the first run of this unit failed).
+Environment=HOME=/home/steve
+# This one waits for the last player to leave, so it may stay active for hours.
+TimeoutStartSec=0
+# Consumes the trigger, then polls until RCON reports 0 players, the unit has
+# been dead for a few polls, or it gives up (12 h by default).
+ExecStart=/home/steve/minecraft/scripts/restart-when-empty.sh
+
+# No ordering against autoplug: this unit restarts it, and depending on it
+# would create a transaction deadlock (same reasoning as mc-restart.service).

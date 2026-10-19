@@ -188,10 +188,19 @@ it is built so the web app still needs no privilege:
 
 | piece | role |
 |---|---|
-| `POST /restart` | renders a confirmation card (there is no JavaScript to ask) that lists who would be disconnected |
-| `POST /restart?confirm=1` | writes `~/minecraft/restart.request`, the only file the app writes outside its SQLite database, then redirects to `/` |
-| `mc-restart.path` | `PathExists=` on that file, runs as root |
-| `mc-restart.service` | removes the trigger, then runs `systemctl restart autoplug` — exactly what an operator would type |
+| `POST /restart` | renders a confirmation card (there is no JavaScript to ask) that lists who would be disconnected, with one submit button per mode |
+| `POST /restart`, `mode=now` | writes `~/minecraft/restart.request` → `mc-restart.path` → `mc-restart.service` runs `systemctl restart autoplug` |
+| `POST /restart`, `mode=empty` | writes `~/minecraft/restart-when-empty.request` → `mc-restart-when-empty.path` → `mc-restart-when-empty.service` runs `scripts/restart-when-empty.sh`, which waits |
+| `POST /restart`, `mode=cancel` | deletes the queue: the state file (waiter running) and/or the request file (not picked up yet) |
+| `restart-when-empty.state` | the queue itself — written by the waiter, rendered by the banner, deleted to cancel |
+
+Both modes are the same idea: the app's only capability is "create a file the
+matching path unit watches". The deferred one adds a queue whose truth is a file
+owned by the *waiter script*, so the dashboard holds no queue state and
+restarting the dashboard can neither lose nor duplicate it. The script waits for
+RCON to report 0 players, acts anyway if `autoplug` has been inactive for three
+polls (nobody can be playing a server that is not running), and gives up after
+`MAX_WAIT` (12 h) leaving the server alone.
 
 Why not `sudo systemctl restart`: the service runs with
 `NoNewPrivileges=yes`, and making sudo work would hand the web app a
@@ -265,7 +274,7 @@ server-side.
 | a jar has no `plugin.yml` | that plugin shows filename | fallback |
 | `latest.log` rotated mid-read | versions keep last good value | non-fatal |
 | reload storm | extra RCON calls | cache collector results ~5 s |
-| `mc-restart.path` disabled | the banner keeps saying "restart requested" and nothing happens | `systemctl status mc-restart.path`; the file is only a trigger and is safe to delete |
+| a restart path unit failed (`unit-start-limit-hit`) | that button silently does nothing, and the queue file stays | only a service that keeps failing reaches the start limit: read `journalctl -u mc-restart*`, fix the cause, `systemctl reset-failed <unit>`, then delete the stale `restart*.request` (the files are triggers, safe to remove) |
 
 ## Decisions taken (2026-10-13)
 

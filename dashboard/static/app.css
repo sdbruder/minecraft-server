@@ -189,6 +189,12 @@ body.confirm > main {
   margin-inline: auto;
   padding-top: 1rem;
 }
+/* Two buttons side by side ("when empty" / "now") instead of Pico's
+   full-width stack. */
+body.confirm article form button {
+  width: auto;
+  margin: 0 0.4rem 0.4rem 0;
+}
 
 @media (max-width: 30rem) {
   body > main {

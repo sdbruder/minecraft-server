@@ -499,10 +499,21 @@ def _status_banner(state, span):
                     f"{_clock(availability['outage_start'], with_date=True, seconds=True)} UTC")
 
     pending = status.get("restart_pending")
+    waiting = status.get("restart_waiting")
     if pending:
         action = (f"<p><small>restart requested "
                   f"{_clock(pending, with_date=True, seconds=True)} UTC — waiting for the "
                   f"service to pick it up</small></p>")
+    elif waiting:
+        online = players.get("count")
+        count_text = f"{online} online" if online is not None else "live count unknown"
+        action = (
+            f"<p><small>restart queued for when the server empties — {esc(count_text)}, "
+            f"queued {_clock(waiting, with_date=True, seconds=True)} UTC</small></p>\n"
+            '<form method="post" action="/restart">'
+            '<input type="hidden" name="mode" value="cancel">'
+            '<button type="submit">Cancel restart</button></form>'
+        )
     elif name == "starting":
         action = "<p><small>a restart is in progress…</small></p>"
     else:
@@ -561,13 +572,25 @@ def login_page(error=None, next_path="/", asset_v="0"):
     return LOGIN_PAGE.format(error=message, next=esc(next_path), asset_v=asset_v)
 
 
-def restart_page(state, pending=None, busy=False, asset_v="0"):
+def restart_page(state, pending=None, waiting=None, busy=False, asset_v="0"):
+    """Confirmation card for the restart button.
+
+    Both buttons are plain submit buttons carrying `mode`, so the page needs no
+    JavaScript to offer the choice; `pending`/`waiting`/`busy` are the states
+    where there is nothing left to choose.
+    """
     back = '<p><a href="/">Back to the dashboard</a></p>'
     if pending:
         body = (
             "<h2>Restart already queued</h2>\n"
             f"<p>A request from {_clock(pending, with_date=True, seconds=True)} UTC has "
             "not been picked up yet — reload in a moment.</p>\n" + back
+        )
+    elif waiting:
+        body = (
+            "<h2>Restart already queued</h2>\n"
+            f"<p>A restart queued at {_clock(waiting, with_date=True, seconds=True)} UTC is "
+            "still waiting for the last player to leave.</p>\n" + back
         )
     elif busy:
         body = (
@@ -581,15 +604,27 @@ def restart_page(state, pending=None, busy=False, asset_v="0"):
             plural = "" if len(names) == 1 else "s"
             who = (f"<p>This disconnects <strong>{len(names)} player{plural}</strong>: "
                    f"{esc(', '.join(names))}.</p>")
+            options = (
+                '<form method="post" action="/restart">'
+                '<button type="submit" name="mode" value="empty">Restart when empty</button>'
+                '<button type="submit" name="mode" value="now">Restart now</button>'
+                "</form>\n"
+                "<p><small>“When empty” waits for the last player to leave (up to 12 h), so "
+                "nobody is kicked. “Now” disconnects them immediately.</small></p>"
+            )
         else:
             who = "<p>Nobody is online, so nobody gets disconnected.</p>"
+            options = (
+                '<form method="post" action="/restart">'
+                '<button type="submit" name="mode" value="now">Restart now</button>'
+                "</form>"
+            )
         body = (
             "<h2>Restart the server?</h2>\n"
             f"{who}\n"
             "<p>Paper saves the world and shuts down; AutoPlug starts it again — usually "
             "back in 25–40 s.</p>\n"
-            '<form method="post" action="/restart?confirm=1">'
-            '<button type="submit">Restart now</button></form>\n'
+            f"{options}\n"
             '<p><a href="/">Cancel</a></p>'
         )
     return RESTART_PAGE.format(asset_v=asset_v, body=body)

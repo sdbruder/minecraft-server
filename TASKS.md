@@ -33,6 +33,9 @@ Shipped (see README "Changelog" for the details):
   (README "Dashboard", `dashboard/ARCHITECTURE.md`).
 - **2026-10-19** — a Restart button on the dashboard, executed through
   `mc-restart.path` so the web app needs no privilege.
+- **2026-10-19** — "Restart when empty": queues the restart until the last
+  player leaves, with a cancel button (`mc-restart-when-empty.path` +
+  `scripts/restart-when-empty.sh` + `scripts/rcon-list.py`).
 - **2026-10-16** — the dashboard shows server up/down (status card + measured
   availability, outage bands on the charts) and the charts follow a timespan
   (24 h / 7 / 30 / 90 days, plus a TPS panel). `mc-watchdog.timer` pushes an

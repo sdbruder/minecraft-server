@@ -48,6 +48,17 @@ PLUGINS_DIR = MC_DIR / "plugins"
 # gets sudo or bus access — see ARCHITECTURE.md.
 RESTART_FILE = Path(os.environ.get("RESTART_FILE") or MC_DIR / "restart.request")
 
+# "Restart when empty" is the same idea one step removed: this trigger starts
+# scripts/restart-when-empty.sh, which waits and restarts on its own. Its state
+# file *is* the queue — the script creates it while waiting and this app deletes
+# it to cancel, so no queue state lives in the web process.
+RESTART_WAIT_REQUEST = Path(
+    os.environ.get("RESTART_WAIT_REQUEST") or MC_DIR / "restart-when-empty.request"
+)
+RESTART_WAIT_STATE = Path(
+    os.environ.get("RESTART_WAIT_STATE") or MC_DIR / "restart-when-empty.state"
+)
+
 LIVE_TTL = 5.0          # seconds a live snapshot is reused
 WORLD_TTL = 600.0       # seconds the world size is reused (walking is slow)
 HISTORY_TTL = 20.0      # seconds a span's history is reused (a 90 d query)
@@ -144,6 +155,45 @@ def restart_pending():
         return None
 
 
+def restart_waiting():
+    """Epoch when a "restart when empty" was queued, or None.
+
+    The file belongs to scripts/restart-when-empty.sh and only exists while that
+    script is waiting, so reading it is the whole state.
+    """
+    try:
+        modified = int(RESTART_WAIT_STATE.stat().st_mtime)
+    except OSError:
+        return None
+    try:
+        for line in RESTART_WAIT_STATE.read_text(encoding="utf-8").splitlines():
+            if line.startswith("queued "):
+                return int(line.split(None, 1)[1])
+    except (OSError, ValueError):
+        pass
+    return modified
+
+
+def restart_when_empty_requested():
+    """Epoch when a "restart when empty" request was written but not yet picked
+    up, or None. The waiter swaps it for its state file within a second, and
+    until then this is what makes the click visible on the page."""
+    try:
+        return int(RESTART_WAIT_REQUEST.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def restart_when_empty_queued():
+    """Epoch of a queued "restart when empty", or None.
+
+    Two files can mean that: the request the dashboard just wrote, and the
+    state file the waiter replaces it with a moment later. Both count, or the
+    second before the swap would look like "nothing is queued".
+    """
+    return restart_waiting() or restart_when_empty_requested()
+
+
 def server_status(rcon_ok, uptime):
     """Is the server up? RCON answering is the only proof the *game* is up; the
     unit state and the Paper process explain why it is not.
@@ -202,6 +252,7 @@ def gather_live():
     }
     status = server_status(players["error"] is None, perf["uptime"])
     status["restart_pending"] = restart_pending()
+    status["restart_waiting"] = restart_when_empty_queued()
     return {
         "players": players,
         "perf": perf,
@@ -518,41 +569,70 @@ class Handler(BaseHTTPRequestHandler):
         self._send(401, render.login_page(error="Wrong username or password.", next_path=target),
                    "text/html; charset=utf-8")
 
-    def _restart(self):
-        """Queue a restart by writing the trigger file the path unit watches.
+    def _forget_live(self):
+        """Drop the live snapshot so the next render shows the queued state."""
+        with _live_lock:
+            _live_cache.update(t=0.0, v=None)
 
-        Two steps on purpose: a restart disconnects everyone, the page carries
-        no JavaScript to ask for confirmation, and the confirm page doubles as
-        a list of who is about to be disconnected.
+    def _restart(self):
+        """Queue a restart — now, or once the server is empty.
+
+        The app cannot restart anything itself (no sudo, no systemd access): it
+        creates the trigger file the matching path unit watches. "When empty"
+        hands the waiting to scripts/restart-when-empty.sh, whose state file is
+        the queue and whose deletion is the cancel.
+
+        Three steps on purpose: a restart disconnects everyone, the page has no
+        JavaScript to ask for confirmation, and the card doubles as the list of
+        who is about to be disconnected.
         """
-        status = live_state().get("status") or {}
-        # Not status["restart_pending"]: that comes from the 5 s live cache and
-        # a double-click would slip past it. The file is the source of truth.
-        pending = restart_pending()
-        if self._query("confirm") != "1":
+        mode = self._form().get("mode", "")
+        if mode not in ("now", "empty", "cancel"):
             self._send(200, render.restart_page(live_state(), asset_v=ASSET_VERSION),
                        "text/html; charset=utf-8")
             return
-        if pending is not None:
+        if mode == "cancel":
+            # Both files: the state one means the waiter is running, the request
+            # one means it has not been picked up yet. Cancelling must clear
+            # whichever is there, or a "cancelled" queue still fires.
+            removed = []
+            for path in (RESTART_WAIT_STATE, RESTART_WAIT_REQUEST):
+                try:
+                    path.unlink()
+                    removed.append(path.name)
+                except OSError:
+                    pass
+            sys.stderr.write(f"restart-when-empty cancelled ({', '.join(removed) or 'nothing queued'})\n")
+            self._forget_live()
+            self._redirect("/")
+            return
+
+        # The files are the source of truth, not the cached status: a
+        # double-click would otherwise slip past the check.
+        pending = restart_pending()
+        waiting = restart_when_empty_queued()
+        if pending is not None or waiting is not None:
             self._send(409, render.restart_page(live_state(), pending=pending,
-                                               asset_v=ASSET_VERSION),
+                                               waiting=waiting, asset_v=ASSET_VERSION),
                        "text/html; charset=utf-8")
             return
-        if status.get("state") == "starting":
+        status = live_state().get("status") or {}
+        if mode == "now" and status.get("state") == "starting":
             self._send(409, render.restart_page(live_state(), busy=True,
                                                asset_v=ASSET_VERSION),
                        "text/html; charset=utf-8")
             return
+
         user = self._session_user() or "?"
+        target = RESTART_WAIT_REQUEST if mode == "empty" else RESTART_FILE
         try:
-            RESTART_FILE.write_text(f"{user} {int(time.time())}\n", encoding="utf-8")
+            target.write_text(f"{user} {int(time.time())} {mode}\n", encoding="utf-8")
         except OSError as exc:
             self._send(500, f"could not queue the restart: {exc}\n",
                        "text/plain; charset=utf-8")
             return
-        with _live_lock:                      # drop the cache so the redirect
-            _live_cache.update(t=0.0, v=None)  # shows "restart requested"
-        sys.stderr.write(f"restart requested by {user}\n")
+        self._forget_live()
+        sys.stderr.write(f"restart ({mode}) requested by {user}\n")
         self._redirect("/")
 
     def do_POST(self):

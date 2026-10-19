@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch for a dashboard "restart when empty" request
+
+[Path]
+# Same pattern as mc-restart.path: the dashboard (user steve, no privileges)
+# creates a trigger file and this unit, running as root, turns it into work.
+# The long-running part lives in mc-restart-when-empty.service.
+PathExists=/home/steve/minecraft/restart-when-empty.request
+Unit=mc-restart-when-empty.service
+
+[Install]
+WantedBy=paths.target

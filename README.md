@@ -103,6 +103,7 @@ repo (installed to `/etc/systemd/system/`).
 | `mc-alerts.service` | The Pushover join alerts (successful and rejected). |
 | `mc-watchdog.timer` | Probes the server once a minute; alerts when it goes down, and again when it comes back. |
 | `mc-restart.path` | Turns the dashboard's Restart button into `systemctl restart autoplug` (the web app has no privileges of its own). |
+| `mc-restart-when-empty.path` | Turns "Restart when empty" into a queue that restarts once nobody is playing (`scripts/restart-when-empty.sh`). |
 | `mc-dashboard.service` | The read-only web dashboard (behind nginx at `mc.example.com`). |
 | `mc-backup-prune.timer` | Daily prune of old backup archives on the Storage Box. |
 
@@ -250,10 +251,12 @@ browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
   responding / down, with the `autoplug` unit state, the Paper pid, the uptime,
   the player count and the share of the window that was up;
 - **Restart server** — a button in that card, and the page's only write action.
-  It asks for confirmation (naming who will be disconnected), then drops
-  `~/minecraft/restart.request`; `mc-restart.path` turns that into
-  `systemctl restart autoplug` as root. The web app itself keeps
-  `NoNewPrivileges`, no sudo and no systemd access;
+  The confirmation card offers **Restart when empty** (waits for the last player
+  to leave, up to 12 h, so nobody is kicked) and **Restart now**, and the banner
+  then shows the queue with a **Cancel restart** button. Both modes only drop a
+  trigger file (`restart.request` / `restart-when-empty.request`) which the
+  matching `mc-restart*.path` unit turns into `systemctl restart autoplug` as
+  root: the web app keeps `NoNewPrivileges`, no sudo and no systemd access;
 - players online (Java and Bedrock) and charts of peak players and TPS;
 - charts follow a timespan — **24 h / 7 / 30 / 90 days** (`?span=…` links, kept
   across the 15 s refresh); outages are drawn as red bands, and a gap means "no
@@ -352,6 +355,42 @@ off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
 See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-19 - Dashboard: "Restart when empty", a queue you can cancel
+
+- The confirmation card now offers two plain submit buttons (still no
+  JavaScript; `mode` travels in the POST body):
+  - **Restart when empty** queues the restart and waits for the last player to
+    leave, so nobody is kicked — the option to use while the kids are playing;
+  - **Restart now** is the previous behaviour, offered alone when nobody is on.
+- Same no-privilege pattern as the immediate restart: the dashboard writes
+  `~/minecraft/restart-when-empty.request`, `mc-restart-when-empty.path` fires
+  `mc-restart-when-empty.service` (root), and `scripts/restart-when-empty.sh`
+  polls RCON `list` every 30 s. It also acts when the server has been *dead* for
+  three polls in a row (nobody can be playing) and gives up after `MAX_WAIT`
+  (12 h) without touching anything.
+- The queue is the script's state file, so the banner shows
+  `restart queued for when the server empties — 2 online, queued 19:55:14 UTC`
+  with a **Cancel restart** button; cancelling deletes the state file *and* the
+  not-yet-picked-up request file, so a cancelled queue cannot fire later.
+- Added `scripts/rcon-list.py`, the shell-usable RCON client the repo lacked:
+  prints the count, or `unknown` with exit 2, so callers can tell "nobody is
+  playing" from "no idea".
+- Bugs found and fixed while testing, each of which would have shipped broken:
+  the "already queued" check ignored the request file before the waiter picked
+  it up (so a `now` restart could be queued next to it); **cancel left the
+  request file behind**; and the service unit had no `HOME`, so the script's
+  `$HOME/minecraft/…` defaults became `/minecraft/…` — every run failed with
+  exit 1, the request file stayed, and the path unit retriggered until systemd's
+  start limit marked it failed. That last one is why the route then answered
+  `409`: the leftover file made the guard believe a queue was pending.
+- Evidence: against a fake RCON — waits while 2 players, restarts when they
+  leave, cancels on demand, gives up after `MAX_WAIT`, acts on a dead unit,
+  refuses a second queue with `409`. Then end to end on the live server with
+  nobody online: `POST mode=empty` → `302`, the request was consumed, the
+  service logged `empty -> restarting` / `restart command finished`, and Paper
+  came back (`Done (32.700s)`) with PlaytimeLimit, Geyser b1254 and ViaVersion
+  5.12.1 enabled and no queue files left behind.
 
 ### 2026-10-19 - Dashboard: Restart button, without privilege in the web app
 
