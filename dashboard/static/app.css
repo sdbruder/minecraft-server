@@ -17,6 +17,26 @@
   --pico-line-height: 1.35;
 }
 
+/* Palette: the status banner tones, the outage bands in the charts, and the
+   two restart buttons (red = disconnects everyone now, orange = waits for an
+   empty server). Light and dark values are picked for white button text. */
+:root {
+  --mc-up: #1a7f37;
+  --mc-warn: #9a6700;
+  --mc-down: #cf222e;
+  --mc-restart-now: #cf222e;
+  --mc-restart-wait: #bc4c00;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mc-up: #3fb950;
+    --mc-warn: #d29922;
+    --mc-down: #f85149;
+    --mc-restart-now: #da3633;
+    --mc-restart-wait: #bd561d;
+  }
+}
+
 /* Pico caps the content at 1450px; a wide screen should be usable instead. */
 body > header,
 body > main,
@@ -85,22 +105,53 @@ body > footer button[type="submit"] {
   margin-bottom: 0;
 }
 
+/* ---- metrics page footer: one row of buttons ---------------------------
+ * Both restarts and Sign out share one row, right-aligned, with the caption on
+ * the left. Each restart button acts on a single click, so the colour is the
+ * warning: red disconnects everyone now, orange waits for an empty server. */
+body.dash > footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.8rem;
+}
+body.dash > footer p {
+  margin-bottom: 0;
+}
+body.dash > footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+body.dash > footer form {
+  display: inline;
+  margin: 0;
+}
+body.dash > footer button[name="mode"] {
+  color: #fff;
+}
+body.dash > footer button[name="mode"][value="now"] {
+  background-color: var(--mc-restart-now);
+  border-color: var(--mc-restart-now);
+}
+body.dash > footer button[name="mode"][value="empty"] {
+  background-color: var(--mc-restart-wait);
+  border-color: var(--mc-restart-wait);
+}
+body.dash > footer button[name="mode"]:hover {
+  filter: brightness(1.12);
+}
+body.dash > footer button[name="mode"]:disabled {
+  filter: none;
+  opacity: 0.45;
+}
+
 /* ---- metrics page: status banner ----------------------------------------
  * The first card answers "is the server up?" and spans every column. The
  * tone comes from data-status on the <article>, so no markup classes are
  * needed. --mc-down doubles as the outage band colour in the charts. */
-:root {
-  --mc-up: #1a7f37;
-  --mc-warn: #9a6700;
-  --mc-down: #cf222e;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --mc-up: #3fb950;
-    --mc-warn: #d29922;
-    --mc-down: #f85149;
-  }
-}
 body.dash > main > article[data-status] {
   column-span: all;
   border-left: 0.35rem solid currentColor;
@@ -170,30 +221,11 @@ body.dash article p {
   font-size: 0.82rem;
 }
 
-/* The one write action on the page: a small, out-of-the-way button. The card
-   is about state; the button is a deliberate, confirmed exception. */
-body.dash article[data-status] form {
-  margin: 0.35rem 0 0;
-}
-body.dash article[data-status] form button {
-  width: auto;
-  padding: 0.2rem 0.7rem;
-  font-size: 0.78rem;
-  margin-bottom: 0;
-}
-
-/* ---- sign-in / restart confirmation: one narrow, centred card ---------- */
-body.login > main,
-body.confirm > main {
+/* ---- sign-in page: one narrow, centred card ---------------------------- */
+body.login > main {
   max-width: 24rem;
   margin-inline: auto;
   padding-top: 1rem;
-}
-/* Two buttons side by side ("when empty" / "now") instead of Pico's
-   full-width stack. */
-body.confirm article form button {
-  width: auto;
-  margin: 0 0.4rem 0.4rem 0;
 }
 
 @media (max-width: 30rem) {

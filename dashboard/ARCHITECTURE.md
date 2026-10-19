@@ -184,11 +184,13 @@ the app ever writes.
 ## Restart button (2026-10-19)
 
 The page deliberately had no write path. A restart is the single exception, and
-it is built so the web app still needs no privilege:
+it is built so the web app still needs no privilege. Both restart buttons live
+in the footer row next to Sign out — red for *now*, orange for *when empty* —
+so the choice is visible instead of hidden behind a confirmation step:
 
 | piece | role |
 |---|---|
-| `POST /restart` | renders a confirmation card (there is no JavaScript to ask) that lists who would be disconnected, with one submit button per mode |
+| `POST /restart` | the footer's buttons, each carrying `mode`; no confirmation step — the colours carry the warning, and each button is disabled while its action is impossible |
 | `POST /restart`, `mode=now` | writes `~/minecraft/restart.request` → `mc-restart.path` → `mc-restart.service` runs `systemctl restart autoplug` |
 | `POST /restart`, `mode=empty` | writes `~/minecraft/restart-when-empty.request` → `mc-restart-when-empty.path` → `mc-restart-when-empty.service` runs `scripts/restart-when-empty.sh`, which waits |
 | `POST /restart`, `mode=cancel` | deletes the queue: the state file (waiter running) and/or the request file (not picked up yet) |
@@ -209,10 +211,11 @@ exiting by itself, and if that assumption is wrong the "restart" button becomes
 a "shut down" button.
 
 Guards: the route needs the session cookie like every other page, passes the
-same `Origin`/`Host` check, and refuses (`409`) while a request is already
-queued or while the server is `starting`. The UI swaps the button for
-`restart requested …` / `a restart is in progress…`, and because the unit
-consumes the file, the pending state clears itself once the service picks it up.
+same `Origin`/`Host` check, answers `400` for a missing or unknown `mode`, and
+refuses (`409`) while a request is already queued or while the server is
+`starting`. The footer disables whichever button cannot act and the banner shows
+the state, so those `409`s are only reachable by hand; because the unit consumes
+the file, the pending state clears itself once the service picks it up.
 
 ## Runtime & deployment
 

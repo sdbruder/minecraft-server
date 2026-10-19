@@ -250,13 +250,14 @@ browser Basic-auth prompt. One page, refreshed every 15 s, with no JavaScript:
 - **is the server up?** — a full-width status card first: up / starting / not
   responding / down, with the `autoplug` unit state, the Paper pid, the uptime,
   the player count and the share of the window that was up;
-- **Restart server** — a button in that card, and the page's only write action.
-  The confirmation card offers **Restart when empty** (waits for the last player
-  to leave, up to 12 h, so nobody is kicked) and **Restart now**, and the banner
-  then shows the queue with a **Cancel restart** button. Both modes only drop a
-  trigger file (`restart.request` / `restart-when-empty.request`) which the
-  matching `mc-restart*.path` unit turns into `systemctl restart autoplug` as
-  root: the web app keeps `NoNewPrivileges`, no sudo and no systemd access;
+- **two restart buttons in the footer row**, next to Sign out, and the page's
+  only write actions: **Restart now** (red — disconnects everyone) and
+  **Restart when empty** (orange — waits for the last player to leave, up to
+  12 h, so nobody is kicked). While a queue is waiting the orange button becomes
+  **Cancel restart** and the red one is disabled. Each only drops a trigger file
+  (`restart.request` / `restart-when-empty.request`) which the matching
+  `mc-restart*.path` unit turns into `systemctl restart autoplug` as root: the
+  web app keeps `NoNewPrivileges`, no sudo and no systemd access;
 - players online (Java and Bedrock) and charts of peak players and TPS;
 - charts follow a timespan — **24 h / 7 / 30 / 90 days** (`?span=…` links, kept
   across the 15 s refresh); outages are drawn as red bands, and a gap means "no
@@ -355,6 +356,29 @@ off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
 See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-19 - Dashboard: the restart buttons move to the footer row
+
+- Two buttons instead of one: **Restart now** (red) and **Restart when empty**
+  (orange), each acting on a single click. The confirmation card added earlier
+  today is gone — it hid the choice behind an extra step, and the colours plus
+  the explicit labels carry the warning instead.
+- They share the footer row with **Sign out** (caption left, buttons right,
+  wrapping on a narrow screen). While a "when empty" is queued the orange button
+  becomes **Cancel restart** and the red one is disabled, so the page never
+  offers an action the backend would refuse; the banner keeps the state text
+  (`restart queued for when the server empties — 2 online, queued … UTC`).
+- Colours join the shared palette as `--mc-restart-now` / `--mc-restart-wait`,
+  with light and dark values chosen so white button text stays readable.
+- `POST /restart` without a valid `mode` now answers a plain `400` (nothing
+  renders that card any more) and the `409` cases answer in plain text.
+- Verified in a browser against a copy of the live database: three buttons on one
+  row (`sameRow`), red `rgb(218,54,51)` / orange `rgb(189,86,29)` / Sign out, no
+  buttons left in the status card; clicking *when empty* flips to
+  `Restart now [disabled] + Cancel restart` with the queue note; cancel returns
+  to idle. Then on the server: the footer markup as served, `400` for a
+  missing/bogus `mode`, and `mode=now` → `302` with `mc-restart.service`
+  reporting `Result=success`.
 
 ### 2026-10-19 - Dashboard: "Restart when empty", a queue you can cancel
 

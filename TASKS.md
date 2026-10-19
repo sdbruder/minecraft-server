@@ -35,7 +35,9 @@ Shipped (see README "Changelog" for the details):
   `mc-restart.path` so the web app needs no privilege.
 - **2026-10-19** — "Restart when empty": queues the restart until the last
   player leaves, with a cancel button (`mc-restart-when-empty.path` +
-  `scripts/restart-when-empty.sh` + `scripts/rcon-list.py`).
+  `scripts/restart-when-empty.sh` + `scripts/rcon-list.py`). Both restart
+  buttons sit in the footer row next to Sign out (red = now, orange = when
+  empty), and the confirmation card is gone.
 - **2026-10-16** — the dashboard shows server up/down (status card + measured
   availability, outage bands on the charts) and the charts follow a timespan
   (24 h / 7 / 30 / 90 days, plus a TPS panel). `mc-watchdog.timer` pushes an

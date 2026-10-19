@@ -575,21 +575,18 @@ class Handler(BaseHTTPRequestHandler):
             _live_cache.update(t=0.0, v=None)
 
     def _restart(self):
-        """Queue a restart — now, or once the server is empty.
+        """Queue a restart — now, or once the server is empty — or cancel one.
 
         The app cannot restart anything itself (no sudo, no systemd access): it
         creates the trigger file the matching path unit watches. "When empty"
         hands the waiting to scripts/restart-when-empty.sh, whose state file is
-        the queue and whose deletion is the cancel.
-
-        Three steps on purpose: a restart disconnects everyone, the page has no
-        JavaScript to ask for confirmation, and the card doubles as the list of
-        who is about to be disconnected.
+        the queue and whose deletion is the cancel. The buttons live in the page
+        footer and act directly; the colours carry the warning.
         """
         mode = self._form().get("mode", "")
         if mode not in ("now", "empty", "cancel"):
-            self._send(200, render.restart_page(live_state(), asset_v=ASSET_VERSION),
-                       "text/html; charset=utf-8")
+            self._send(400, "mode must be one of: now, empty, cancel\n",
+                       "text/plain; charset=utf-8")
             return
         if mode == "cancel":
             # Both files: the state one means the waiter is running, the request
@@ -611,16 +608,17 @@ class Handler(BaseHTTPRequestHandler):
         # double-click would otherwise slip past the check.
         pending = restart_pending()
         waiting = restart_when_empty_queued()
-        if pending is not None or waiting is not None:
-            self._send(409, render.restart_page(live_state(), pending=pending,
-                                               waiting=waiting, asset_v=ASSET_VERSION),
-                       "text/html; charset=utf-8")
+        if pending is not None:
+            self._send(409, "a restart is already queued\n", "text/plain; charset=utf-8")
+            return
+        if waiting is not None:
+            self._send(409, "a 'restart when empty' is already queued — cancel it first\n",
+                       "text/plain; charset=utf-8")
             return
         status = live_state().get("status") or {}
         if mode == "now" and status.get("state") == "starting":
-            self._send(409, render.restart_page(live_state(), busy=True,
-                                               asset_v=ASSET_VERSION),
-                       "text/html; charset=utf-8")
+            self._send(409, "a restart is already in progress\n",
+                       "text/plain; charset=utf-8")
             return
 
         user = self._session_user() or "?"
