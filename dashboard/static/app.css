@@ -10,9 +10,12 @@
 :root {
   --pico-font-size: 100%;
   --pico-spacing: 0.75rem;
-  --pico-typography-spacing-vertical: 0.5rem;
-  --pico-block-spacing-vertical: 0.7rem;
-  --pico-block-spacing-horizontal: 0.9rem;
+  /* Card padding and paragraph rhythm: the values that make the whole page fit
+     a 1470x869 laptop viewport (MacBook Air 15", full screen) without a
+     scrollbar, together with the per-card rules below. */
+  --pico-typography-spacing-vertical: 0.4rem;
+  --pico-block-spacing-vertical: 0.4rem;
+  --pico-block-spacing-horizontal: 0.65rem;
   --pico-form-element-spacing-vertical: 0.5rem;
   --pico-line-height: 1.35;
 }
@@ -189,18 +192,18 @@ body.dash article[data-status] p {
  * flow packs them with no gaps. */
 body.dash > main {
   columns: 5 26rem;
-  column-gap: 0.8rem;
+  column-gap: 0.45rem;
   margin-top: 0.4rem;
 }
 body.dash > main > article {
   break-inside: avoid;
-  margin-block: 0 0.8rem;
+  margin-block: 0 0.45rem;
 }
 
 body.dash article h2 {
   --pico-typography-spacing-top: 0;
-  font-size: 0.95rem;
-  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
 }
 body.dash article h3 {
   --pico-typography-spacing-top: 0.7rem;
@@ -213,18 +216,18 @@ body.dash article h3 {
 
 /* Compact tables that never overflow a narrow column. */
 body.dash article table {
-  font-size: 0.78rem;
+  font-size: 0.73rem;
   width: 100%;
 }
 body.dash article th,
 body.dash article td {
-  padding: 0.22rem 0.4rem;
+  padding: 0.14rem 0.35rem;
 }
 body.dash article td {
   overflow-wrap: anywhere;
 }
 body.dash article p {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
 }
 
 /* ---- sign-in page: one narrow, centred card ---------------------------- */
