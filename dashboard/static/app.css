@@ -40,6 +40,30 @@
   }
 }
 
+/* Dark surfaces: Pico leaves the page (rgb(19,22.5,30.5)) and the cards
+   (#181c25) about 5/255 apart, so a cell barely separates from the page it
+   floats on. Push the page a step down and every raised surface a step up -
+   same slate hue, only further apart. Cards carry no border of their own, so
+   that step is what makes one cell read as a panel; the table rules inside them
+   come from --pico-muted-border-color, which has to move too or the row lines
+   vanish into the lighter cards. The console follows as well: its transcript
+   reads --pico-code-background-color and its input --pico-form-element-*. */
+@media (prefers-color-scheme: dark) {
+  /* `:not([data-theme=light])` is Pico's own selector for this theme: at equal
+     specificity app.css wins on source order, which it does not against a
+     bare `:root`. */
+  :root:not([data-theme="light"]) {
+    --pico-background-color: #0e1218;
+    --pico-card-background-color: #1d2331;
+    --pico-card-sectioning-background-color: #252c3b;
+    --pico-code-background-color: #252c3b;
+    --pico-form-element-background-color: #171c25;
+    --pico-form-element-active-background-color: #12161d;
+    --pico-muted-border-color: #2d3543;
+    --pico-muted-color: #8b93a3;      /* 4.17:1 -> 5.08:1 on the new card */
+  }
+}
+
 /* Pico caps the content at 1450px; a wide screen should be usable instead. */
 body > header,
 body > main,

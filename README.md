@@ -366,6 +366,27 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-20 - Dashboard: darker page, lighter cells (dark theme)
+
+- Pico's dark palette leaves the page `rgb(19,22.5,30.5)` and the cards
+  `#181c25` about 5/255 apart, and the cards carry no border of their own — so a
+  cell barely separated from the page it floats on. The page now sits at
+  `#0e1218` and every raised surface climbs to `#1d2331`: same slate hue, only
+  further apart, 1.05:1 → 1.20:1.
+- The rest of the stack moves with it: the table row rules
+  (`--pico-muted-border-color` → `#2d3543`), the console transcript
+  (`--pico-code-background-color` → `#252c3b`) and its input
+  (`--pico-form-element-background-color` → `#171c25`, still recessed), and the
+  muted text (`--pico-muted-color` → `#8b93a3`, 4.17:1 → 5.08:1 on the lighter
+  card).
+- Dark only, and it has to out-rank Pico: the block uses
+  `:root:not([data-theme=light])` — Pico's own dark selector — because a bare
+  `:root` loses to it on specificity whatever the source order. The light theme
+  is untouched (page and card stay white).
+- Verified in Chromium at 1470x869 with `prefers-color-scheme: dark`: the 13
+  cards pick up `rgb(29,35,49)` on a `rgb(14,18,24)` page, text on the card
+  stays 9.3:1, and the console transcript sits a step above its card.
+
 ### 2026-10-20 - Dashboard: an RCON console at /console
 
 - A second page — one command, one answer — linked from the footer row. It reuses
