@@ -4,10 +4,21 @@
 
 ### PlaytimeLimit plugin
 
-Status: enabled and verified (2026-10-17 22:11). Its limits live in
-`plugins/PlaytimeLimit/config.yml` on the server and have been tuned since
-(120 min/day, 120-min sessions) — that file is the source of truth, not this
-list.
+Status: enabled, limits off since 2026-10-20. Its limits live in
+`plugins/PlaytimeLimit/config.yml` on the server — that file is the source of
+truth, not this list.
+
+- **No cap (2026-10-20).** Every day is `enabled: true` with 100000 minutes
+  daily and per session, so the checks can never fire. An `enabled: false` day
+  does **not** mean "no limit": `getDailyLimit()` returns 0 for a disabled day
+  and `checkPlayer()` kicks on join with *"You've played enough for today"* — a
+  disabled day is a zero-minute day. That is what locked the family out between
+  10:00 and 15:03 on 2026-10-20.
+- The top-level `enabled:` key is not read by this build (`onEnable()` always
+  registers the listeners, the timer and the commands). To switch the plugin off
+  for real, remove its jar and restart; `/playtimelimit reload` re-reads the
+  config in place, no restart needed.
+- To bring the school-day cap back: `enabled: true` plus 120/120.
 
 - Modrinth **PlaytimeLimit** 1.0.0 (`DMhofPzM`, Apache-2.0, Paper/Spigot/Bukkit,
   `api-version: 1.20`); sha512 verified, and audited before install (plain

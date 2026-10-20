@@ -366,6 +366,24 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-20 - PlaytimeLimit: the cap is off again
+
+- Every day in `plugins/PlaytimeLimit/config.yml` is now `enabled: true` with
+  100000 minutes daily *and* per session, so no check can trip. Verified by
+  replaying the plugin's own gate (`getDailyLimit()` → `checkPlayer()`) over the
+  live file — all seven days come out "no kick" — and by `/playtimelimit reload`
+  over RCON (`Configuration reloaded!`). No server restart.
+- The plugin reads a per-day `enabled: false` as **zero minutes**, not "no
+  limit": `getDailyLimit()` returns 0 and `checkPlayer()` kicks on join with
+  *"You've played enough for today"*. That is what locked the family out from
+  10:00 to 15:03 today (`Kai` twice at 10:00/10:01, `Alex` three
+  times from 14:57), one second after each join.
+- `enabled:` at the top of the file does nothing in this build: `onEnable()`
+  always registers the listeners, the timer and the commands, so the only real
+  off switch is removing the jar (which also drops the daily cookie). The join
+  summary now prints the 100000 cap — the price of a plugin with no "unlimited"
+  value.
+
 ### 2026-10-20 - Dashboard: darker page, lighter cells (dark theme)
 
 - Pico's dark palette leaves the page `rgb(19,22.5,30.5)` and the cards
