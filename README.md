@@ -42,9 +42,19 @@ Two independent things keep the world safe.
 **AutoPlug's archive** is written to `~/minecraft/autoplug/backups` and kept for
 `backup.max-days: 3` (~1.2 GB). Its `exclude` list drops everything
 re-downloadable (`cache`, `libraries`, `versions`, `server.jar`, `spigot.jar`,
-`AutoPlug-Files.zip`, `dashboard`); the rest compresses to 386–422 MB
-(`2026-10-23-07.35-BACKUP.zip` = 421,844,430 bytes), of which ~191 MB is the
-world. Config: `~/minecraft/autoplug/backup.yml`.
+`AutoPlug-Files.zip`, `dashboard`, `plugins/.paper-remapped`) and the stale
+`*.bak` copies of big jars (`plugins/Geyser-Spigot.jar.pre-1251.bak`,
+`AutoPlug-Client.jar.pre-10.2.1.bak`,
+`plugins/ViaVersion-LATEST-[5.11.0].jar.pre-5.12.0.bak`); what is left
+compresses to 386–422 MB (`2026-10-23-07.35-BACKUP.zip` = 421,844,430 bytes),
+~191 MB of it world. Config: `~/minecraft/autoplug/backup.yml`.
+
+The four excludes added on 2026-10-23 (AutoPlug logs
+`backup.yml (ENTRY_MODIFY): Internal values updated.` when it re-reads the file)
+remove 90 MB of `.bak` files plus 40 MB of remap cache, so archives should come
+out around **290 MB** from the next run on. The exclude list takes exact paths —
+no globs — so a future `.bak` with a new version in its name has to be added by
+hand. AutoPlug rewrites this file, so only values survive, never comments.
 
 It is **not a cron job**: the backup task runs on every wrapper/server start and
 is gated by `backup.cool-down: 500` minutes (~8h20m). In practice that means one
