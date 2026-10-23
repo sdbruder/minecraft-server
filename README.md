@@ -366,6 +366,35 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-23 - Outage 05:00-07:35: AutoPlug self-update restart loop
+
+- **Symptom.** The server was down for about 2h35m: nothing on 25565, the
+  dashboard showed it down, and `autoplug.service` sat in `activating
+  (auto-restart)` with a rising `NRestarts` (154 by the time it was caught).
+  `logs/latest.log` ended with a clean save at 05:00:11 and never started again.
+- **Cause.** The 05:00 daily restart made the wrapper's self-updater fetch
+  AutoPlug **10.2.1**, write it to `autoplug/downloads/AutoPlug-Client.jar`,
+  launch it as a child and exit 0. `Restart=always` then restarted the unit, and
+  its `ExecStart` pointed at the **stale** `AutoPlug-Client.jar` (10.2.0): boot
+  10.2.0 → download 10.2.1 → relaunch → exit → restart 10.2.0 … Each restart
+  SIGKILLs the cgroup, so the 10.2.1 child the updater had just started never
+  lived long enough to start Paper. This is the same supervised-environment
+  failure upstream reports for Pterodactyl (Osiris-Team/AutoPlug-Client#287).
+- **Fix.** `ExecStart` now runs `autoplug/downloads/AutoPlug-Client.jar` — the
+  jar the updater writes — so the restart a self-update triggers lands on the
+  new version and converges instead of re-downloading forever. `Restart=always`,
+  `RestartSec=10`, `TimeoutStopSec=180` and `KillMode=mixed` are unchanged, so a
+  stop still lets Paper save the world. The unit now lives in this repo at
+  `systemd/autoplug.service` (server backup:
+  `/etc/systemd/system/autoplug.service.pre-downloads-jar.bak`).
+- Also synced the launcher copy: `AutoPlug-Client.jar` 10.2.0 → 10.2.1 (backup
+  `AutoPlug-Client.jar.pre-10.2.1.bak`), kept as the fallback if an update ever
+  leaves the downloads jar broken. The server-updater meanwhile moved `paper.jar`
+  from 26.2 build 133 to build **134** (still pinned to 26.2).
+- **Verified.** Server boots from the new unit — `Done (32.284s)`, 25565 and
+  25575 listening, Geyser on 19132/udp, `NRestarts=0`, exactly one wrapper and
+  one Paper process — with `SelfUpdater: AutoPlug is on the latest version!`.
+
 ### 2026-10-20 - PlaytimeLimit: the cap is off again
 
 - Every day in `plugins/PlaytimeLimit/config.yml` is now `enabled: true` with

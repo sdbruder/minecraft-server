@@ -12,16 +12,21 @@ WorkingDirectory=/home/steve/minecraft
 Environment=HOME=/home/steve
 Environment=USER=steve
 Environment=LANG=C.UTF-8
-ExecStart=/usr/bin/java -Dfile.encoding=UTF-8 -jar /home/steve/minecraft/AutoPlug-Client.jar
-# AutoPlug restarts itself on self-update by exiting; relaunch it. This is what
-# made the old `screen` wrapper necessary (see start.sh history).
+# Run the jar the self-updater writes, not the copy in the server root. On a
+# release the launcher downloads autoplug/downloads/AutoPlug-Client.jar, starts
+# it as a child and exits 0. systemd then restarts the unit (which SIGKILLs that
+# child), so the restart must land on the NEW jar. With ExecStart pointing at
+# AutoPlug-Client.jar it landed on the old one, which updated again and looped
+# forever: 2026-10-23 05:00-07:35 had 154 restarts and the server stayed down.
+# The root copy is kept in sync by hand as the fallback if the updater breaks.
+ExecStart=/usr/bin/java -Dfile.encoding=UTF-8 -jar /home/steve/minecraft/autoplug/downloads/AutoPlug-Client.jar
 Restart=always
 RestartSec=10
 # Paper needs time to save worlds on shutdown.
 TimeoutStopSec=180
-# SIGTERM only to AutoPlug; it sends "stop" to the server child and waits for
-# it to finish saving. (control-group SIGTERM hits the child too, which makes
-# AutoPlug misread it as a crash.)
+# On stop SIGTERM goes to AutoPlug only; it sends "stop" to the server child and
+# waits for it to finish saving. The rest of the cgroup is SIGKILLed only after
+# the main process has exited.
 KillMode=mixed
 # Safety net for any SIGTERM-initiated exit.
 SuccessExitStatus=143
