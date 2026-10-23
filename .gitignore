@@ -4,6 +4,10 @@ mc-alerts.env
 dashboard.env
 storagebox.env
 
+# Backups — never commit (hundreds of MB; the offsite copies live on the
+# Storage Box, see README "Backups"). scripts/backup.sh writes them here.
+minecraft-essentials-*.tar.gz
+
 # Runtime state (see README, "Dashboard").
 dashboard.sqlite
 dashboard.sqlite-wal

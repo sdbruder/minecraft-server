@@ -18,8 +18,9 @@ server is acessible without password with a key thru ssh.
 
 ## Local backup
 
-`minecraft-essentials-2026-10-10.tar.gz` (224 MB) — a restartable snapshot of
-`~/minecraft`: `AutoPlug-Client.jar`, `paper.jar`, `start.sh`, the configs,
+A `minecraft-essentials-<date>.tar.gz` (the 2026-10-10 one is 224 MB) — a
+restartable snapshot of `~/minecraft`: `AutoPlug-Client.jar`, `paper.jar`,
+`start.sh`, the configs,
 `família/`, `plugins/`, `logs/` and AutoPlug `.yml`. Enough to bring the server
 up again: AutoPlug re-fetches Java and Paper re-fetches `libraries/`/`cache/`
 on first start. Excluded: `cache/`, `libraries/`, `versions/`,
@@ -34,6 +35,11 @@ scripts/backup.sh
 It streams a `tar.gz` from the remote host into the repo root as
 `minecraft-essentials-<date>.tar.gz`. Override with `REMOTE`, `REMOTE_DIR`,
 `OUT_DIR` or `STAMP` env vars, or pass the host/dir as arguments.
+
+Backups are **not tracked**: `minecraft-essentials-*.tar.gz` is in `.gitignore`.
+Two of them were committed before 2026-10-23, so this clone's `.git` is still
+~1.1 GB — the blobs live on in the history even though the files are no longer
+in the index.
 
 ## Backups
 
