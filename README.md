@@ -39,12 +39,20 @@ It streams a `tar.gz` from the remote host into the repo root as
 
 Two independent things keep the world safe.
 
-**AutoPlug's daily archive** (05:00 server time) is written to
-`~/minecraft/autoplug/backups` and kept for `backup.max-days: 3` (~1.1 GB). Its
-`exclude` list drops everything re-downloadable (`cache`, `libraries`,
-`versions`, `server.jar`, `spigot.jar`, `AutoPlug-Files.zip`, `dashboard`), so
-an archive is ~314 MB instead of ~890 MB (measured: `2026-10-16-15.10-BACKUP.zip`
-= 328,763,224 bytes). Config: `~/minecraft/autoplug/backup.yml`.
+**AutoPlug's archive** is written to `~/minecraft/autoplug/backups` and kept for
+`backup.max-days: 3` (~1.2 GB). Its `exclude` list drops everything
+re-downloadable (`cache`, `libraries`, `versions`, `server.jar`, `spigot.jar`,
+`AutoPlug-Files.zip`, `dashboard`); the rest compresses to 386–422 MB
+(`2026-10-23-07.35-BACKUP.zip` = 421,844,430 bytes), of which ~191 MB is the
+world. Config: `~/minecraft/autoplug/backup.yml`.
+
+It is **not a cron job**: the backup task runs on every wrapper/server start and
+is gated by `backup.cool-down: 500` minutes (~8h20m). In practice that means one
+archive per day at 05:00, because the daily restart is what triggers it — a
+server that stays up for days gets no new archive, and a failed start means no
+archive at all (2026-10-18 has none, and the 05:00 run on 2026-10-23 was lost to
+the wrapper's self-update loop; the 07:35 archive from the recovery restart
+replaced it).
 
 **Offsite copy:** AutoPlug uploads each archive to a Hetzner **Storage Box**
 over SFTP. Note it has **no S3 support** — its uploader speaks FTPS/SFTP or
@@ -91,6 +99,27 @@ SB_KEY=/home/steve/.ssh/id_rsa_storagebox
 SB_PATH=minecraft
 SB_RETAIN_DAYS=30
 ```
+
+### Checking it end to end
+
+The upload is a plain SFTP write, so the cheapest proof is a round trip: pull the
+newest archive back off the box and compare it with the local source. Verified
+2026-10-23 on `2026-10-23-07.35-BACKUP.zip` (421,844,430 bytes): identical
+sha256, `unzip -t` read every CRC with no error, and `família/level.dat` came out
+as valid gzip NBT. The download took ~6 s.
+
+```sh
+set -a; . ~/minecraft/storagebox.env; set +a
+sftp -i "$SB_KEY" -P "${SB_PORT:-22}" "$SB_USER@$SB_HOST" \
+  <<< "get $SB_PATH/2026-10-23-07.35-BACKUP.zip /tmp/verify.zip"
+sha256sum /tmp/verify.zip ~/minecraft/autoplug/backups/2026-10-23-07.35-BACKUP.zip
+unzip -t /tmp/verify.zip | tail -2
+unzip -l /tmp/verify.zip | grep -c 'família/'     # world entries: 187
+```
+
+When reading an archive by hand, the world sits at
+`família/dimensions/minecraft/overworld/region/…` (Paper's layout), not
+`família/region/` — a `grep família/region/` returns nothing and proves nothing.
 
 ## Services (systemd)
 
