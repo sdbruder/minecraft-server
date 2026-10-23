@@ -41,20 +41,29 @@ Two independent things keep the world safe.
 
 **AutoPlug's archive** is written to `~/minecraft/autoplug/backups` and kept for
 `backup.max-days: 3` (~1.2 GB). Its `exclude` list drops everything
-re-downloadable (`cache`, `libraries`, `versions`, `server.jar`, `spigot.jar`,
-`AutoPlug-Files.zip`, `dashboard`, `plugins/.paper-remapped`) and the stale
-`*.bak` copies of big jars (`plugins/Geyser-Spigot.jar.pre-1251.bak`,
-`AutoPlug-Client.jar.pre-10.2.1.bak`,
-`plugins/ViaVersion-LATEST-[5.11.0].jar.pre-5.12.0.bak`); what is left
-compresses to 386–422 MB (`2026-10-23-07.35-BACKUP.zip` = 421,844,430 bytes),
-~191 MB of it world. Config: `~/minecraft/autoplug/backup.yml`.
+re-downloadable (`autoplug/{backups,downloads,system,logs}`, `cache`,
+`libraries`, `versions`, `server.jar`, `spigot.jar`, `AutoPlug-Files.zip`,
+`dashboard`, `plugins/.paper-remapped`, `plugins/dynmap`,
+`plugins/WorldBorder`) plus `old-jars`, the folder for superseded jars. What is
+left compresses to 386–422 MB (`2026-10-23-07.35-BACKUP.zip` = 421,844,430
+bytes), ~191 MB of it world. Config: `~/minecraft/autoplug/backup.yml`.
 
-The four excludes added on 2026-10-23 (AutoPlug logs
-`backup.yml (ENTRY_MODIFY): Internal values updated.` when it re-reads the file)
-remove 90 MB of `.bak` files plus 40 MB of remap cache, so archives should come
-out around **290 MB** from the next run on. The exclude list takes exact paths —
-no globs — so a future `.bak` with a new version in its name has to be added by
-hand. AutoPlug rewrites this file, so only values survive, never comments.
+**Excludes are exact paths, not patterns.** `BackupConfig.getExcludedFiles()`
+maps each string to a `File` and `TaskBackup` filters with a
+`keep-it-if-not-in-this-list` predicate whose bootstrap method is
+`REF_invokeInterface java/util/List.contains` — i.e. `File.equals`. No globs, no
+prefixes, no regex. An exclusion is therefore generic **only when it names a
+directory**, which is also why `cache`, `libraries`, `versions` and `dashboard`
+never show up in an archive: directory entries are honoured.
+
+That is why superseded jars live in `~/minecraft/old-jars/` (excluded as one
+entry, ~91 MB: Geyser, ViaVersion and AutoPlug-Client `.bak` copies) instead of
+being listed file by file: move the next `.bak` there, whatever version string
+it carries, and it is out of the backup without touching the config. The four
+changes of 2026-10-23 (`old-jars` + `plugins/.paper-remapped`) remove 90 MB of
+`.bak` files and 40 MB of remap cache, so archives should land near **290 MB**
+from the next run on. AutoPlug rewrites this file, so only values survive, never
+comments.
 
 It is **not a cron job**: the backup task runs on every wrapper/server start and
 is gated by `backup.cool-down: 500` minutes (~8h20m). In practice that means one
@@ -463,8 +472,8 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
   `systemd/autoplug.service` (server backup:
   `/etc/systemd/system/autoplug.service.pre-downloads-jar.bak`).
 - Also synced the launcher copy: `AutoPlug-Client.jar` 10.2.0 → 10.2.1 (backup
-  `AutoPlug-Client.jar.pre-10.2.1.bak`), kept as the fallback if an update ever
-  leaves the downloads jar broken. The server-updater meanwhile moved `paper.jar`
+  `old-jars/AutoPlug-Client.jar.pre-10.2.1.bak`, moved there on 2026-10-23),
+  kept as the fallback if an update ever leaves the downloads jar broken. The server-updater meanwhile moved `paper.jar`
   from 26.2 build 133 to build **134** (still pinned to 26.2).
 - **Verified.** Server boots from the new unit — `Done (32.284s)`, 25565 and
   25575 listening, Geyser on 19132/udp, `NRestarts=0`, exactly one wrapper and
