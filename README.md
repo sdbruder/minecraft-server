@@ -366,6 +366,28 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-23 - Cross-play chat: Bedrock players could not talk to Java players
+
+- Report from a player: chat was not crossing between Bedrock and Java. The log
+  named the cause on every Bedrock connection —
+  `Failed to update secure chat state for .Sam: 'Chat disabled due to missing
+  profile public key. Please try reconnecting.'`
+- **Cause:** `enforce-secure-profile=true` in `server.properties` (Mojang's
+  default) makes Paper demand a Mojang-signed chat key. Bedrock players arrive
+  through Geyser/Floodgate without one, so the server disables their chat. This
+  is documented Geyser behaviour ([Geyser and Secure
+  Chat](https://geysermc.org/wiki/geyser/secure-chat/)), not a fault of the
+  server or of Paper 26.2 — Bedrock chat cannot work with that flag on.
+- **Fix:** `enforce-secure-profile=false` (backup
+  `server.properties.pre-secure-profile-off.bak`; diff is that one line). Java
+  chat is no longer signed/verified — acceptable on a whitelisted family
+  server, and the only way to let Bedrock players chat at all.
+- Takes effect on the next Paper boot. Three players were online, so instead of
+  kicking them the change went through the dashboard's own "restart when empty"
+  path (`restart-when-empty.request` → `mc-restart-when-empty.service`, state in
+  `restart-when-empty.state`). The Geyser warning should be gone on the next
+  Bedrock join.
+
 ### 2026-10-23 - Rejected-joins chart: bars take their width from the bucket
 
 - The bars were sized `plot_w / len(points)` but placed by timestamp. The rejects
