@@ -37,9 +37,10 @@ It streams a `tar.gz` from the remote host into the repo root as
 `OUT_DIR` or `STAMP` env vars, or pass the host/dir as arguments.
 
 Backups are **not tracked**: `minecraft-essentials-*.tar.gz` is in `.gitignore`.
-Two of them were committed before 2026-10-23, so this clone's `.git` is still
-~1.1 GB — the blobs live on in the history even though the files are no longer
-in the index.
+Two were committed before 2026-10-23 (with four revisions of the Oct-10 one in
+history); the history was rewritten on 2026-10-23 to drop them, which took
+`.git` from 1.1 GB down to 288 KB. Every commit hash changed — there are no
+remotes, so nothing to reconcile.
 
 ## Backups
 
@@ -419,6 +420,24 @@ off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
 See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-23 - Git history rewritten: backups out of the repository
+
+- The two `minecraft-essentials-*.tar.gz` snapshots were tracked — with four
+  revisions of the Oct-10 one and one of the Oct-15 one in history — so `.git`
+  carried ~1 GB of gzipped world data next to 30 source files. First untracked
+  and git-ignored, then the history itself was rewritten:
+  `git filter-branch --index-filter 'git rm --cached --ignore-unmatch
+  minecraft-essentials-2026-10-10.tar.gz minecraft-essentials-2026-10-15.tar.gz'
+  --prune-empty --tag-name-filter cat -- --all`, then `rm -rf .git/refs/original`,
+  `git reflog expire --expire=now --all`, `git gc --prune=now`.
+- Result: 53 → 52 commits (the one commit that only added a snapshot became empty
+  and was pruned by `--prune-empty`; no commit with source changes was affected),
+  the same 30 tracked files, working tree clean, `git fsck --full` silent, no
+  commit touches a `*.tar.gz`, and `.git` **1.1 GB → 288 KB**.
+- Every hash changed. There are no remotes, so nothing to reconcile. A
+  pre-rewrite bundle sits at `/tmp/minecraft-pre-rewrite.bundle` (794 MB) until
+  it is no longer wanted; the tarballs themselves are still on disk, untracked.
 
 ### 2026-10-23 - Cross-play chat: Bedrock players could not talk to Java players
 
