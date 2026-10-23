@@ -366,6 +366,20 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
 
+### 2026-10-23 - Rejected-joins chart: bars take their width from the bucket
+
+- The bars were sized `plot_w / len(points)` but placed by timestamp. The rejects
+  series carries only the buckets that had events, so the 90-day chart drew four
+  **70px** bars for four 1-day buckets and neighbours covered each other — 3
+  overlapping pairs at 30d, 6 at 90d, and 7d drew a single 280px slab. `slot` now
+  comes from the bucket's real width on the axis (`plot_w × bucket / window`):
+  2.3px at 30d (6 h buckets), 3.1px at 90d (1 day), 1.4px at 7d (1 h).
+- Still server-rendered SVG with no JavaScript: the `<title>` tooltip keeps the
+  exact count and the "N attempts in this window" caption the total, so thin bars
+  stay readable.
+- Verified on the served page — 0 overlapping pairs at 7d/30d/90d in the measured
+  `rect` geometry and in a screenshot of the panel.
+
 ### 2026-10-23 - Outage 05:00-07:35: AutoPlug self-update restart loop
 
 - **Symptom.** The server was down for about 2h35m: nothing on 25565, the

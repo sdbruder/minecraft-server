@@ -284,7 +284,11 @@ def time_chart(points, span, kind="line", width=640, height=150, unit="",
         return " (partial)" if ts < x0 else ""
 
     if kind == "bars":
-        slot = plot_w / max(1, len(points))
+        # The slot width is the bucket's own width on the time axis, never
+        # plot_w / len(points): the series only carries the buckets that have
+        # events, so sizing by the point count drew 70px bars across a 90-day
+        # window and neighbouring buckets overlapped each other.
+        slot = plot_w * span["bucket"] / (span["hours"] * 3600)
         width_bar = max(1.0, min(slot * 0.7, slot - 1))
         for ts, value in points:
             if value is None:

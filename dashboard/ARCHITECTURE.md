@@ -343,6 +343,14 @@ server-side.
   flatten the axis. It draws y gridlines on 1/2/5×10ⁿ steps, four x labels
   formatted for the window, an area+line or bars, outage bands behind the
   series, and `<title>` tooltips so hovering works without JavaScript.
+  - Bar width is the **bucket's width on the axis**
+    (`plot_w × bucket / window`), never `plot_w / len(points)`: the rejects
+    series only carries the buckets that had events, so sizing by the point
+    count drew 70px bars for 1-day buckets across 90 days and neighbours
+    overlapped (fixed 2026-10-23). Bars are therefore 2.3px at 30d (6 h
+    buckets), 3.1px at 90d (1 day) and 1.4px at 7d (1 h) — the `<title>`
+    tooltip and the "N attempts in this window" caption carry what a thin bar
+    cannot.
 - **Spans are links, not client state.** `?span=` is re-queried server-side and
   survives the 15 s meta refresh; `/state.json?span=` gives scripts the same
   window. History is cached ~20 s per span, so a 90-day query does not run on
