@@ -1,5 +1,21 @@
 # Minecraft server
 
+## About this repository (public copy)
+
+MIT licensed — see `LICENSE`. Personal data is scrubbed, so the names in the
+examples are placeholders:
+
+| placeholder | stands for |
+|---|---|
+| `Steve`, `Alex`, `Kai`, `Sam` | the players (`.`-prefixed = Bedrock, via Floodgate) |
+| `203.0.113.x`, `198.51.100.9` | client and host addresses (RFC 5737 ranges) |
+| `host.example.com`, `mc.example.com` | the server and its dashboard |
+| `u123456.your-storagebox.de` | the Hetzner Storage Box account |
+| `steve`, `/home/steve` | the runtime user |
+
+Substitute your own when deploying: the `systemd/` units and the scripts carry
+these placeholders verbatim, so a `sed` over them is part of installation.
+
 ## Basic facts
 
 There is a minecraft server managed by autoplug with a couple of plugins, some facts:
