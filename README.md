@@ -13,8 +13,23 @@ examples are placeholders:
 | `u123456.your-storagebox.de` | the Hetzner Storage Box account |
 | `steve`, `/home/steve` | the runtime user |
 
-Substitute your own when deploying: the `systemd/` units and the scripts carry
-these placeholders verbatim, so a `sed` over them is part of installation.
+### Deploying with these placeholders
+
+The units and the nginx conf in this repo are *templates*; one script fills them
+in for the machine you deploy to:
+
+```sh
+cp deploy.env.example deploy.env       # git-ignored: SITE_USER, SITE_HOME, hosts
+scripts/install-units.sh --diff        # what would change in /etc/systemd/system
+sudo scripts/install-units.sh          # install, then systemctl daemon-reload
+scripts/install-units.sh --out /tmp/u  # or stage the rendered files elsewhere
+```
+
+Scripts need no substitution: they default to `$HOME` and take overrides from
+`dashboard.env`, `storagebox.env` and `mc-alerts.env`, which the processes read
+at runtime. Unit directives cannot: systemd resolves `User=`, `Group=`,
+`ExecStart=` and `EnvironmentFile=` before any environment exists, which is why
+the templates exist at all.
 
 ## Basic facts
 

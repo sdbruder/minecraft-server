@@ -4,6 +4,11 @@ mc-alerts.env
 dashboard.env
 storagebox.env
 
+# Site values for deploying to a real host (user, paths, hostnames). The
+# templates in systemd/ and nginx/ stay generic; scripts/install-units.sh fills
+# them in on the target machine. Copy deploy.env.example.
+deploy.env
+
 # Backups — never commit (hundreds of MB; the offsite copies live on the
 # Storage Box, see README "Backups"). scripts/backup.sh writes them here.
 minecraft-essentials-*.tar.gz
