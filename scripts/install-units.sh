@@ -66,8 +66,6 @@ SITE_DOMAIN="${SITE_DOMAIN:-}"
 render() {
     sed -E \
         -e "s#/home/steve#${SITE_HOME}#g" \
-        -e "s#/home/steve#${SITE_HOME}#g" \
-        -e "s#steve#${SITE_USER}#g" \
         -e "s#steve#${SITE_USER}#g" \
         -e "s#host\\.example\\.com#${SITE_SERVER_HOST}#g" \
         -e "s#mc\\.example\\.com#${SITE_DASH_HOST}#g" \

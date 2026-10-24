@@ -44,7 +44,7 @@ table to maintain.
 
 Copy `deploy.env.example` to `deploy.env` (git-ignored) and fill it in:
 
-| key | example | meaning |
+| key | placeholder | meaning |
 |---|---|---|
 | `SITE_USER` | `steve` | `User=`/`Group=` in every unit; owner of the server tree |
 | `SITE_HOME` | `/home/steve` | its home directory |
@@ -55,8 +55,9 @@ Copy `deploy.env.example` to `deploy.env` (git-ignored) and fill it in:
 | `SITE_SSH_HOST` | `host.example.com` | ssh target for `deploy.sh` |
 | `SITE_NGINX_CONF` | `/etc/nginx/sites-available/mc.example.com.conf` | where the rendered conf belongs |
 
-The map to the placeholders in the templates is 1:1 — the README, "About this
-repository", tabulates it.
+Fill each with your own value; the renderer replaces the placeholder throughout
+the templates. The mapping is 1:1 — the README, "About this repository",
+tabulates the same pairs.
 
 ## First-time setup
 
