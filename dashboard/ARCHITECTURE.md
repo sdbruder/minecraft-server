@@ -26,8 +26,9 @@ One HTML page, served by the server itself, that shows at a glance:
   it, and it needs no privilege in the web app (see "Restart button" below).
 - No accounts, sessions, or external database service — one shared Basic-auth
   credential and a local SQLite file.
-- No client-side JavaScript, no build step, no CDN. Charts are static SVG
-  rendered by the server.
+- No build step and no CDN, and JavaScript stays optional: the page
+  auto-refreshes without it, charts are static SVG rendered by the server, and
+  the only script is a ~15-line refresh probe (see "Offline-safe refresh").
 
 ## Constraints (from `TASKS.md` + recon)
 
@@ -50,7 +51,7 @@ One HTML page, served by the server itself, that shows at a glance:
 | Framework | **none** — `ThreadingHTTPServer` + one `BaseHTTPRequestHandler` | No magic, no routing layer to learn | Flask/FastAPI |
 | CSS | **Pico CSS v2, classless variant, vendored** (`dashboard/static/pico.classless.min.css`) | Semantic HTML needs **no classes**, so `render.py` emits plain `<table>`/`<h2>` and the server stays the only place with logic; one ~10 KB file served locally, so no CDN, works offline | hand-written style block; Water.css (plainer tables); Bootstrap (~227 KB, a class on every element); Tailwind (build step) |
 | Layout | **`static/app.css`** (~2.5 KB) on top of Pico, multi-column flow | Pico scales the root font with the viewport (131.25% at ≥1536px) and caps content at 1450px, which reads oversized for a metrics page and wastes a wide screen. The override pins the type size, adds a full-width container and flows the cards into `columns: 5 26rem` — 3 columns at 1470, 4 at 1920, 5 at 3440. Card order is part of the layout: the balancer only breaks *between* cards, so the page is tuned to land at ~680 px per column on a 1470x869 screen (that is why the joins/leaves card sits with the players cards) | CSS grid (unequal card heights leave row gaps), masonry (not portable), a class-based framework (markup churn) |
-| Frontend logic | **none** — `<meta http-equiv="refresh">` + server-rendered inline SVG | "Simplest": the server renders everything, including the charts. The timespan switch is a plain link (`?span=7d`), which the meta refresh keeps, and values are read on hover through SVG `<title>` — so interactivity needs no JavaScript either | JS `fetch`/Chart.js/uPlot/WebSocket |
+| Frontend logic | **none, but for the refresh** — server-rendered inline SVG + a `fetch("/healthz")` probe before each reload | "Simplest": the server renders everything, including the charts. The timespan switch is a plain link (`?span=7d`), which the refresh keeps, and values are read on hover through SVG `<title>`. The one script exists because a bare `<meta http-equiv="refresh">` navigates blindly and an offline navigation replaces the dashboard with the browser's error page — see "Offline-safe refresh" | JS `fetch`/Chart.js/uPlot/WebSocket; a blind meta refresh |
 | Chart window | **`?span=24h\|7d\|30d\|90d`**, bucket sizes 30 min→1 day | One table (`store.SPANS`) feeds both the query and the panel title, so they cannot drift; every span stays at 48-168 points | client-side zoom/pan (needs JS); a fixed window |
 | Storage | **SQLite** (`sqlite3`, stdlib) | Embedded, one file, zero services, real SQL for time buckets; enough for a time series of this size | see "Storage" below |
 | Player source (live) | **RCON `list`** on `127.0.0.1:25575` | Authoritative live count + names; no join/leave state to maintain | parsing `latest.log` joins (fragile — a chat plugin rewrites `X joined the game` to `System chat: ...`) |
@@ -363,3 +364,33 @@ server-side.
   pan. It would be ~50 KB and a second rendering path for a page that must work
   with no build step; the server-rendered SVG covers what the data supports at
   this cadence.
+
+## Decision added (2026-10-27): offline-safe refresh
+
+- **Problem.** The page refreshed with a bare
+  `<meta http-equiv="refresh" content="15">`. That is a blind navigation: when
+  the timer fires while the laptop is asleep, waking up, or otherwise offline
+  (no Wi-Fi yet, VPN down, DNS not up), the navigation fails and Chrome
+  **commits its error page over the tab** — `chrome-error://chromewebdata/`, the
+  "No Internet" dinosaur — and the dashboard is gone until someone reloads it by
+  hand. The error page carries no refresh, so nothing recovers it on its own.
+  The tab's *only* scheduled action was the one that could destroy it, and a
+  dashboard left open all day hits that case often.
+- **Fix.** The auto-refresh is now a ~15-line script: on each tick it
+  `fetch("/healthz", {cache: "no-store"})` and calls `location.reload()` **only
+  if the probe answered**. A failed probe is a no-op — the page stays on screen,
+  stale, and retried a period later — so there is no navigation to fail. It
+  reloads immediately on `online` and on `visibilitychange` (the tab becoming
+  visible again), which is the wake-up case that matters. `/healthz` is used
+  rather than `/state.json`: it answers before auth and builds no state, so the
+  probe costs nothing per tick.
+- **No-JavaScript path kept.** `<noscript><meta http-equiv="refresh"></noscript>`
+  in `<head>` still refreshes for a browser with scripting off; browsers honour a
+  meta refresh inside `<noscript>`. So "no JavaScript" remains a supported way to
+  use the page, not a requirement of it.
+- **Verified.** With a managed Chromium at `REFRESH=4`: offline for 12 s (3
+  periods) left the document untouched (URL still `/`, title, cards and a
+  `window` marker set after going offline all intact); back online, the page
+  reloaded itself and the marker was gone. The old markup under the same offline
+  emulation landed on `chrome-error://chromewebdata/` after 7 s — the reported
+  symptom, reproduced.

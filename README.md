@@ -326,7 +326,11 @@ journalctl -u mc-watchdog -n 20
 Metrics at **<https://mc.example.com>**, plus an RCON console at `/console`.
 Sign in with the usual username/password **form** (`/login`), so a password
 manager can save it — no browser Basic-auth prompt. The metrics page refreshes
-every 15 s, and nothing here uses JavaScript:
+every 15 s, and it only reloads once the server has answered a probe — so a
+refresh that comes due while the machine is asleep or offline leaves the page
+alone instead of replacing it with the browser's "No Internet" error page
+(details in `dashboard/ARCHITECTURE.md`, "offline-safe refresh"). Everything
+else is server-rendered and needs no JavaScript:
 
 - **is the server up?** — the first cell answers it: up / starting / not
   responding / down, with the `autoplug` unit state, the Paper pid, the uptime,
@@ -445,6 +449,27 @@ off. Config backup: `autoplug/updater.yml.pre-java-version-fix.bak`.
 See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 
 ## Changelog
+
+### 2026-10-27 - Dashboard tab no longer dies to the browser's "No Internet" page
+
+- The metrics page refreshed with a bare `<meta http-equiv="refresh" content="15">`.
+  A meta refresh navigates blindly, so when it came due while the machine was
+  asleep, waking or offline, the navigation failed and the browser committed its
+  own error page (`chrome-error://chromewebdata/`) **over the tab** — an open
+  dashboard turned into the "No Internet" dinosaur and stayed there, since that
+  page has no refresh of its own.
+- Now the refresh probes `fetch("/healthz")` first and only then reloads; a
+  failed probe leaves the page exactly as it was and retries a period later. It
+  also reloads at once on `online` and when the tab becomes visible again, which
+  is the wake-up case. `<noscript><meta http-equiv="refresh"></noscript>` keeps
+  auto-refresh working with scripting off, as before.
+- Reproduced and fixed under emulated offline in Chromium: old markup after 7 s
+  offline → `chrome-error://chromewebdata/`; new markup after 12 s (3 periods)
+  offline → document untouched (URL, title, cards and a window marker all
+  intact), and back online it reloaded itself.
+- One request per tick more (`/healthz`, answered before auth and building no
+  state), and the page now carries ~15 lines of inline JavaScript — the only
+  script in `dashboard/`.
 
 ### 2026-10-23 - Git history rewritten: backups out of the repository
 

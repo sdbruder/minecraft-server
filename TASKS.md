@@ -40,6 +40,9 @@ truth, not this list.
 
 Shipped (see README "Changelog" for the details):
 
+- **2026-10-27** — the dashboard's 15 s refresh is now probe-then-reload, so a
+  refresh that comes due while the machine is offline no longer replaces an open
+  tab with the browser's "No Internet" page.
 - **2026-10-20** — an RCON console at `/console` (linked from the footer row):
   one command, one answer, monospace, Paper's §-colour codes rendered. It is the
   only place the dashboard is not read-only.

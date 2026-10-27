@@ -17,7 +17,7 @@ PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="{refresh}">
+<noscript><meta http-equiv="refresh" content="{refresh}"></noscript>
 <title>{title}</title>
 <link rel="stylesheet" href="/static/pico.classless.min.css">
 <link rel="stylesheet" href="/static/app.css?v={asset_v}">
@@ -37,6 +37,38 @@ PAGE = """<!doctype html>
   <p><small>Read-only metrics · <a href="/state.json">state.json</a> · refreshed every {refresh} s · times in UTC</small></p>
   <div>{actions}</div>
 </footer>
+<script>
+// Refresh only when the server answers.
+//
+// This used to be a bare <meta http-equiv="refresh">, which navigates blindly.
+// When it fires while the machine is asleep, waking, or offline, the navigation
+// fails and the browser commits its own error page in place of the dashboard -
+// the tab is then stuck on "No Internet" until it is reloaded by hand. Probing
+// first turns that into a no-op: a failed probe leaves the page exactly as it
+// was, and the retry below is what recovers it. Without JavaScript the page
+// still auto-refreshes, through the <noscript> meta refresh in <head>.
+//
+// This is a str.format template: literal braces below are doubled.
+(() => {{
+  const period = {refresh} * 1000;
+  let timer;
+  const later = (ms) => {{ clearTimeout(timer); timer = setTimeout(tick, ms); }};
+  async function tick() {{
+    try {{
+      const r = await fetch("/healthz", {{cache: "no-store"}});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      location.reload();
+    }} catch (e) {{
+      later(period);            // offline: keep the page, try again later
+    }}
+  }}
+  later(period);
+  // Waking up, or a network that came back, is the common case: do not wait a
+  // whole period for a timer that slept along with the machine.
+  addEventListener("online", () => later(0));
+  addEventListener("visibilitychange", () => {{ if (!document.hidden) later(0); }});
+}})();
+</script>
 </body>
 </html>
 """
