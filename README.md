@@ -394,6 +394,9 @@ curl -s -b /tmp/mc.jar https://mc.example.com/state.json
 - Serving: nginx vhost `nginx/mc.example.com.conf` proxies to
   `127.0.0.1:8080` and reuses the `*.example.com` certificate.
 - Manage it: `sudo systemctl status|restart mc-dashboard`.
+- Deploy it: render `dashboard/render.py` with the site values, copy it over,
+  restart the unit — `deploy.sh` covers units and nginx only. See DEPLOY.md,
+  "The dashboard app".
 
 ## Version pin (important)
 
@@ -470,6 +473,15 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
 - One request per tick more (`/healthz`, answered before auth and building no
   state), and the page now carries ~15 lines of inline JavaScript — the only
   script in `dashboard/`.
+- Deployed the same day: `dashboard/render.py` was rendered with the site values
+  (its subtitle hostname and one RFC 5737 address in a docstring are
+  placeholders here and real there), the rendered file diffed against the host's
+  copy first — only this change — then copied over it, with the previous file in
+  `~/minecraft/dashboard-backup-<stamp>/`, and `mc-dashboard` restarted. The
+  live page over HTTPS was checked afterwards: probe script and `<noscript>`
+  refresh present, no bare meta refresh, site hostname intact. DEPLOY.md gained
+  "The dashboard app", because `deploy.sh` never carried these files and a raw
+  `scp` would put the placeholder on the live page.
 
 ### 2026-10-23 - Git history rewritten: backups out of the repository
 

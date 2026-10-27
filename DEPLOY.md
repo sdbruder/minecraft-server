@@ -10,11 +10,12 @@ left out of that.
 | 11 systemd units (`systemd/`) | the world (`família/`), `paper.jar`, `plugins/*.jar` |
 | the nginx conf (`nginx/`) | `plugins/*/config.yml` — plugins own their own config |
 | `scripts/*.sh` (copied, never rendered) | `autoplug/*.yml`, the dashboard's SQLite history |
-| — | the runtime env files (`dashboard.env`, `storagebox.env`, `mc-alerts.env`) |
+| the dashboard app — `dashboard/*.py` + `dashboard/static/` (rendered, then copied) | the runtime env files (`dashboard.env`, `storagebox.env`, `mc-alerts.env`) |
 
 AutoPlug owns the server side: it fetches Java and Paper, applies the plugin and
-server updates, and writes the backups (see README, "Backups"). Deployment here
-means the *systemd layer* and nginx, nothing else.
+server updates, and writes the backups (see README, "Backups"). For the systemd
+layer and nginx, deployment means `deploy.sh`; the dashboard app has no script
+(it is four files and a restart) — see "The dashboard app" below.
 
 ## Why there are templates
 
@@ -58,6 +59,42 @@ Copy `deploy.env.example` to `deploy.env` (git-ignored) and fill it in:
 Fill each with your own value; the renderer replaces the placeholder throughout
 the templates. The mapping is 1:1 — the README, "About this repository",
 tabulates the same pairs.
+
+## The dashboard app
+
+`dashboard/*.py` are templates too, and `deploy.sh` does **not** carry them: the
+host copy of `render.py` holds the real site values (the page subtitle's
+hostname, one RFC 5737 example address in a docstring) where the repository
+holds the placeholders (`host.example.com`, `203.0.113.13`). Render with the
+same table `install-units.sh` uses — never `scp` the raw file, which would put
+the placeholder on the live page:
+
+```sh
+. ./deploy.env
+sed -E -e "s#/home/steve#$SITE_HOME#g" -e "s#steve#$SITE_USER#g" \
+       -e "s#host\.example\.com#$SITE_SERVER_HOST#g" \
+       -e "s#mc\.example\.com#$SITE_DASH_HOST#g" \
+       -e "s#example\.com#$SITE_DOMAIN#g" \
+       -e "s#203\.0\.113\.13#<the host's real client address>#g" \
+       dashboard/render.py > /tmp/render.py
+diff -u <(ssh HOST 'cat ~/minecraft/dashboard/render.py') /tmp/render.py   # expect: only your change
+ssh HOST 'stamp=$(date +%Y%m%d-%H%M%S); mkdir -p ~/minecraft/dashboard-backup-$stamp \
+          && cp -a ~/minecraft/dashboard/render.py ~/minecraft/dashboard-backup-$stamp/'
+scp /tmp/render.py HOST:~/minecraft/dashboard/render.py
+ssh HOST 'python3 -c "import ast;ast.parse(open(\"/home/steve/minecraft/dashboard/render.py\").read())" \
+          && sudo systemctl restart mc-dashboard'
+```
+
+- The `diff` before the copy is the point: it proves the render is lossless, so
+  what lands is your change and nothing else.
+- `static/` needs no substitution; copy it as-is (it is only CSS).
+- `collect.py`, `console.py`, `server.py` and `store.py` carry no placeholders
+  either, but they live in the same directory and change on the same cadence.
+- Verify through the real URL, not just the unit: sign in at
+  `https://$SITE_DASH_HOST/` and check the page carries what you deployed (the
+  unit can be `active` while the app serves an old render).
+- Rollback: copy `render.py` back out of the newest
+  `~/minecraft/dashboard-backup-<stamp>/` and restart the unit.
 
 ## First-time setup
 

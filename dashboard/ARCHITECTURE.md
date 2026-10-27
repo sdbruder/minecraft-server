@@ -278,9 +278,12 @@ systemd/mc-dashboard.service
   `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX` (the last one for
   `systemctl show`). **Not** `ProtectHome` (the app must read/write
   `~/minecraft`).
-- Deployment = copy `dashboard/` + the unit, `daemon-reload`, `restart`; plus an
-  nginx `server` block for `mc.example.com` with `proxy_pass
-  http://127.0.0.1:8080` and the existing `*.example.com` certificate.
+- Deployment = render `dashboard/*.py` with the site values, copy `dashboard/` +
+  the unit, `daemon-reload`, `restart`; plus an nginx `server` block for
+  `mc.example.com` with `proxy_pass http://127.0.0.1:8080` and the existing
+  `*.example.com` certificate. `render.py` carries placeholders (the page
+  subtitle's hostname, one RFC 5737 address in a docstring), so it is rendered
+  like a unit file and never copied raw — DEPLOY.md, "The dashboard app".
 
 ## Configuration & secrets
 
