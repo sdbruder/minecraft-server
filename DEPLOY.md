@@ -87,6 +87,10 @@ ssh HOST 'python3 -c "import ast;ast.parse(open(\"/home/steve/minecraft/dashboar
 
 - The `diff` before the copy is the point: it proves the render is lossless, so
   what lands is your change and nothing else.
+- `ARCHITECTURE.md` is not read at runtime — nothing in the app opens it. Keep it
+  current by hand with the same table, or delete it from the host; leaving a copy
+  there unrefreshed is how a 2026-10-13 draft was still sitting next to the
+  running code a fortnight later.
 - `static/` needs no substitution; copy it as-is (it is only CSS).
 - `collect.py`, `console.py`, `server.py` and `store.py` carry no placeholders
   either, but they live in the same directory and change on the same cadence.

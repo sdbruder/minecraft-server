@@ -478,10 +478,15 @@ See `TASKS.md` (empty as of 2026-10-16 — the dashboard shipped).
   placeholders here and real there), the rendered file diffed against the host's
   copy first — only this change — then copied over it, with the previous file in
   `~/minecraft/dashboard-backup-<stamp>/`, and `mc-dashboard` restarted. The
-  live page over HTTPS was checked afterwards: probe script and `<noscript>`
+  live page was checked afterwards: probe script and `<noscript>`
   refresh present, no bare meta refresh, site hostname intact. DEPLOY.md gained
   "The dashboard app", because `deploy.sh` never carried these files and a raw
   `scp` would put the placeholder on the live page.
+- The host's `dashboard/ARCHITECTURE.md` was still the 2026-10-13 **proposal**
+  (218 lines, "not implemented yet") next to code that had shipped two weeks of
+  changes; it was rendered with the same table and replaced (399 lines, 10
+  substituted lines and nothing else). Nothing reads that file at runtime, so
+  DEPLOY.md now says that plainly: refresh it with the same table or delete it.
 
 ### 2026-10-23 - Git history rewritten: backups out of the repository
 
